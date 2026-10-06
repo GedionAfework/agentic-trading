@@ -27,6 +27,13 @@ from private_trading_db.models.ops import (
     OutboxEvent,
     SystemSetting,
 )
+from private_trading_db.models.strategy import (
+    Strategy,
+    StrategyRule,
+    StrategyScope,
+    StrategyTestCase,
+    StrategyVersion,
+)
 
 __all__ = [
     "User",
@@ -51,4 +58,9 @@ __all__ = [
     "ProviderSymbol",
     "Candle",
     "MarketDataGap",
+    "Strategy",
+    "StrategyVersion",
+    "StrategyRule",
+    "StrategyScope",
+    "StrategyTestCase",
 ]

@@ -11,6 +11,7 @@ dependencies = [
     "private-trading-knowledge",
     "private-trading-market-data",
     "private-trading-features",
+    "private-trading-strategies",
     "private-trading-worker",
     "private-trading-telegram",
 ]

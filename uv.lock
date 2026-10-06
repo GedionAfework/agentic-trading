@@ -41,6 +41,7 @@ dependencies = [
     { name = "private-trading-features" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
+    { name = "private-trading-strategies" },
     { name = "private-trading-telegram" },
     { name = "private-trading-worker" },
 ]
@@ -64,6 +65,7 @@ requires-dist = [
     { name = "private-trading-features", editable = "packages/features" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
+    { name = "private-trading-strategies", editable = "packages/strategies" },
     { name = "private-trading-telegram", editable = "apps/telegram" },
     { name = "private-trading-worker", editable = "apps/worker" },
 ]
@@ -1179,6 +1181,7 @@ dependencies = [
     { name = "private-trading-db" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
+    { name = "private-trading-strategies" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1191,6 +1194,7 @@ requires-dist = [
     { name = "private-trading-db", editable = "packages/db" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
+    { name = "private-trading-strategies", editable = "packages/strategies" },
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
@@ -1360,10 +1364,16 @@ version = "0.1.0"
 source = { editable = "packages/strategies" }
 dependencies = [
     { name = "private-trading-core" },
+    { name = "private-trading-db" },
+    { name = "private-trading-features" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "private-trading-core", editable = "packages/core" }]
+requires-dist = [
+    { name = "private-trading-core", editable = "packages/core" },
+    { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-features", editable = "packages/features" },
+]
 
 [[package]]
 name = "private-trading-telegram"

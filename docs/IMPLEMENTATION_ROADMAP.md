@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phase 6 landing**  
+**Status:** Active build plan — **Phase 7 landing**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -10,7 +10,8 @@
 **Phase 3:** `AIGateway` (Ollama), model/prompt registry, `/v1/ai/health` + smoke endpoints  
 **Phase 4:** Knowledge upload/chunk/embed/approve + `/v1/knowledge/ask` with citations  
 **Phase 5:** Market catalog + Binance spot candles + freshness/health APIs  
-**Phase 6:** Deterministic features (ATR/swings/BOS/volume) with UNKNOWN fail-closed
+**Phase 6:** Deterministic features (ATR/swings/BOS/volume) with UNKNOWN fail-closed  
+**Phase 7:** Strategy DSL + wyckoff-hdm gates + publish/evaluate APIs
 
 ---
 
