@@ -29,6 +29,9 @@ resources/labels/**
 .DS_Store
 Thumbs.db
 
+# Local object storage / uploads
+data/
+
 # Temp extraction
 tmp/
 notebooks/.ipynb_checkpoints/

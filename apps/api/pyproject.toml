@@ -5,8 +5,13 @@ description = "FastAPI application entrypoint"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "private-trading-db",
+    "private-trading-ai-gateway",
+    "private-trading-knowledge",
+    "private-trading-market-data",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.12",
 ]
 
 [project.scripts]
@@ -21,3 +26,7 @@ packages = ["src/private_trading_api"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }
+private-trading-ai-gateway = { workspace = true }
+private-trading-knowledge = { workspace = true }
+private-trading-market-data = { workspace = true }

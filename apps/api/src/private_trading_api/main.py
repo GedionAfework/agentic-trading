@@ -4,11 +4,18 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from private_trading_ai_gateway.client import AIGatewayError
 from private_trading_core.config import get_settings
 from private_trading_core.ids import new_correlation_id
 from private_trading_core.logging import configure_logging, get_logger
+from private_trading_db.session import dispose_engine
 
+from private_trading_api.errors import register_exception_handlers
+from private_trading_api.routes.ai import router as ai_router
+from private_trading_api.routes.auth import router as auth_router
 from private_trading_api.routes.health import router as health_router
+from private_trading_api.routes.knowledge import router as knowledge_router
+from private_trading_api.routes.markets import router as markets_router
 
 logger = get_logger(__name__)
 
@@ -19,6 +26,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger.info("api_starting env=%s", settings.app_env)
     yield
+    await dispose_engine()
     logger.info("api_stopping")
 
 
@@ -41,8 +49,33 @@ def create_app() -> FastAPI:
         response.headers["X-Correlation-ID"] = correlation_id
         return response
 
+    register_exception_handlers(app)
+
+    @app.exception_handler(AIGatewayError)
+    async def ai_gateway_error_handler(request, exc: AIGatewayError):
+        from fastapi.responses import JSONResponse
+
+        status_code = 503 if exc.retryable else 502
+        correlation_id = getattr(request.state, "correlation_id", None)
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "correlation_id": correlation_id,
+                    "retryable": exc.retryable,
+                    "details": exc.details,
+                }
+            },
+        )
+
     app.include_router(health_router)
     app.include_router(health_router, prefix="/v1")
+    app.include_router(auth_router, prefix="/v1")
+    app.include_router(ai_router, prefix="/v1")
+    app.include_router(knowledge_router, prefix="/v1")
+    app.include_router(markets_router, prefix="/v1")
     return app
 
 

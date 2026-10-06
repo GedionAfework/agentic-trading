@@ -5,6 +5,8 @@ description = "Market data providers and normalization"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "private-trading-db",
+    "httpx>=0.27",
 ]
 
 [build-system]
@@ -16,3 +18,4 @@ packages = ["src/private_trading_market_data"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }

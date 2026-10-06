@@ -5,6 +5,11 @@ description = "Parsing, RAG, embeddings"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "private-trading-db",
+    "private-trading-ai-gateway",
+    "pymupdf>=1.24",
+    "python-docx>=1.1",
+    "pgvector>=0.3",
 ]
 
 [build-system]
@@ -16,3 +21,5 @@ packages = ["src/private_trading_knowledge"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }
+private-trading-ai-gateway = { workspace = true }

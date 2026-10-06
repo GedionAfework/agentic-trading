@@ -6,6 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-api",
+    "private-trading-db",
+    "private-trading-ai-gateway",
+    "private-trading-knowledge",
+    "private-trading-market-data",
+    "private-trading-features",
     "private-trading-worker",
     "private-trading-telegram",
 ]
@@ -73,6 +78,7 @@ pythonpath = ["."]
 target-version = "py312"
 line-length = 100
 src = ["apps", "packages", "tests"]
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

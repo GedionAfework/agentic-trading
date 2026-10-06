@@ -29,10 +29,16 @@ class Settings(BaseSettings):
     object_storage_secret_key: str = "test"
     object_storage_bucket: str = "private-trading"
     object_storage_region: str = "us-east-1"
+    object_storage_local_root: str = "data/objects"
 
     ollama_base_url: str = "http://localhost:11434"
-    main_model: str = "qwen2.5:14b"
+    # Prefer smaller tags for first smoke if VRAM is limited (e.g. qwen2.5:3b)
+    main_model: str = "qwen2.5:7b"
     embedding_model: str = "nomic-embed-text"
+    ai_timeout_seconds: float = 120.0
+    ai_max_retries: int = 2
+    ai_circuit_failure_threshold: int = 5
+    ai_circuit_recovery_seconds: float = 30.0
 
     jwt_secret: str = Field(
         default="dev-only-change-me",
@@ -46,6 +52,11 @@ class Settings(BaseSettings):
 
     scanner_enabled: bool = True
     notifications_enabled: bool = True
+
+    # Public market data (no secrets required for Binance spot klines)
+    binance_base_url: str = "https://api.binance.com"
+    market_http_timeout_seconds: float = 20.0
+    market_default_timeframes: str = "15m,1h"
 
 
 @lru_cache

@@ -5,7 +5,17 @@ description = "SQLAlchemy models and repositories"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "argon2-cffi>=23.1",
+    "PyJWT>=2.9",
+    "email-validator>=2.2",
+    "pgvector>=0.3",
 ]
+
+[project.scripts]
+pta-seed-owner = "private_trading_db.seed:main"
 
 [build-system]
 requires = ["hatchling"]
