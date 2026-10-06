@@ -1,0 +1,1027 @@
+
+
+===== PAGE 1 =====
+Private Self-Hosted AI Trading Copilot Platform
+Private Self-Hosted AI Trading Copilot
+Platform
+Software Requirements Specification (SRS)
+Detailed functional, non-functional, safety, data, integration and acceptance requirements
+Document Version 2.0
+Status Implementation-ready baseline
+Prepared For Private trading research and decision-support
+platform
+Architecture Self-hosted LLM/VLM, deterministic trading engine,
+private RAG
+Safety Boundary No autonomous live-money execution in baseline
+release
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 2 =====
+Private Self-Hosted AI Trading Copilot Platform
+Document Navigation
+This document uses numbered headings, requirement identifiers, interface identifiers, and cross-document
+references. In Microsoft Word, a generated table of contents can be inserted or refreshed from References >
+Table of Contents. The PDF is organized so the heading hierarchy remains visually clear even without a dynamic
+TOC field.
+1. Purpose and Scope
+This SRS defines the complete product requirements for a private, self-hosted AI trading copilot that ingests the
+owner's trading courses, strategies, screenshots and guides; monitors configured markets; identifies candidate
+setups; answers questions; analyzes chart screenshots; applies deterministic strategy and risk rules; sends
+Telegram/mobile alerts; and records outcomes for later analytics. The system is designed as decision support and
+research tooling. It must not imply guaranteed profitability or certainty about future price movement.
+1.1 Product Goals
+ Keep the primary LLM, vision model, embeddings, knowledge base, prompts, agent memory and trading
+journal on infrastructure controlled by the owner.
+ Translate informal trading knowledge into versioned, testable strategy definitions and deterministic rule
+checks.
+ Continuously scan selected markets without continuously invoking the LLM for every tick.
+ Provide explainable setup alerts that cite the strategy/rules that were satisfied and those that were not.
+ Allow natural-language and screenshot-based interaction through both a mobile application and a Telegram
+bot.
+ Maintain a complete evidence trail for each setup: source candles, derived indicators, rule results, model
+outputs, risk assessment, notifications and final outcome.
+ Support backtesting and paper trading before any future consideration of live broker execution.
+1.2 Out of Scope for Baseline Release
+ Autonomous live-money order placement.
+ Guaranteed buy/sell predictions or profitability claims.
+ High-frequency or ultra-low-latency trading.
+ Custody of user funds or acting as a broker/exchange.
+ Training a foundation model from scratch.
+ Social copy-trading, public signal marketplace, or multi-tenant public SaaS in baseline.
+1.3 Stakeholders
+Stakeholder Needs / Responsibilities
+Platform Owner / Trader Owns strategies, configures markets, reviews setups, approves
+knowledge, uses mobile/Telegram interfaces.
+System Administrator Deploys services, rotates secrets, manages backups, models,
+GPU capacity, observability and upgrades.
+Strategy Maintainer Encodes and versions strategy rules, test fixtures, thresholds
+and market/timeframe eligibility.
+AI/ML Engineer Evaluates self-hosted models, prompt/tool reliability, retrieval
+quality, hallucination controls and model upgrades.
+Backend Engineer Implements APIs, workers, market ingestion, rule engine, agent
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 3 =====
+Private Self-Hosted AI Trading Copilot Platform
+Stakeholder Needs / Responsibilities
+orchestration and persistence.
+Mobile Engineer Implements secure Expo/React Native client and push
+notification UX.
+QA / Validation Verifies strategy-rule correctness, backtests, alerts, model
+behavior, resilience and security boundaries.
+2. Product Context and Operating Model
+Figure 1 - Product context and high-level platform architecture
+The system separates probabilistic AI tasks from deterministic financial calculations. LLM/VLM components may
+retrieve, summarize, classify, explain and propose interpretations. Numeric indicator calculation, risk/reward
+calculation, strategy predicates, data freshness checks, entitlement checks, signal state transitions and
+notification deduplication must be implemented in deterministic code.
+2.1 Eight Logical Agents
+ID / Agent Primary Requirement
+AG-01 Orchestrator Classifies intent, selects workflow, invokes allowed tools/agents,
+enforces timeouts and aggregates responses.
+AG-02 Knowledge Agent Retrieves approved strategy/course content from private RAG;
+returns source-linked evidence.
+AG-03 Vision Agent Extracts chart-visible context from screenshots, annotations
+and UI text; never invents exact numeric market data when not
+legible.
+AG-04 Market Data Agent Fetches normalized market snapshots, candles and metadata
+from deterministic services; no direct trading decision
+authority.
+AG-05 Strategy Agent Maps market facts and retrieved knowledge to strategy
+definitions and rule predicates.
+AG-06 Risk Agent Calculates invalidation, R:R, position-risk metadata, market
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 4 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID / Agent Primary Requirement
+freshness and prohibited-condition checks.
+AG-07 Signal Agent Applies publish policy and produces
+WAIT/NO_SETUP/CANDIDATE/READY_FOR_REVIEW/EXPIRED
+decisions.
+AG-08 Journal & Analytics Agent Explains historical performance using persisted outcomes and
+aggregated metrics; cannot rewrite historical source data.
+3. User Roles and Permissions
+Role Capabilities Prohibited
+Owner Full access to strategies, knowledge, setup Cannot bypass immutable audit logging.
+review, config, paper trading, system
+settings and audit views.
+Admin Infrastructure and configuration Cannot modify historical trade outcomes
+management, model selection, connector without auditable correction flow.
+health, user/session management.
+Analyst (future) Read/query knowledge, inspect setups No strategy publishing, secret
+and analytics. management or system administration.
+Service Account Scoped machine-to-machine ingestion or Interactive login, privilege escalation,
+worker operations. unrelated APIs.
+4. Detailed Functional Requirements
+ID Requirement Detailed Statement Priority Acceptance Evidence
+FR-AUTH-001 Local Account System shall support Must Invalid credentials never
+Authentication secure owner/admin reveal whether username
+authentication with exists.
+password hashing and
+optional TOTP MFA.
+FR-AUTH-002 Token Lifecycle Backend shall issue short- Must Revoked session cannot
+lived access tokens and refresh or call protected
+revocable refresh sessions. APIs.
+FR-AUTH-003 Telegram Account Link Owner may explicitly link Must Unlinked Telegram sender
+a Telegram user/chat to an cannot access private
+application account using a strategy data.
+one-time challenge.
+FR-AUTH-004 RBAC Every API and tool action Must Attempted unauthorized
+shall enforce server-side action returns 403 and
+role and capability checks. audit event.
+FR-AUTH-005 Session Inventory Owner shall view and Should Revocation effective within
+revoke active configured propagation
+sessions/devices. window.
+FR-AUTH-006 Security Events System shall record Must Event visible in audit view
+successful/failed login, with actor/time/source.
+MFA, secret rotation and
+privilege changes.
+FR-KB-001 Knowledge Upload Owner shall upload PDF, Must File stored with checksum,
+DOCX, TXT, Markdown, status and ingestion job.
+image and selected video
+transcript resources.
+FR-KB-002 Malware/Type Validation Uploaded file shall be Must Rejected file is not indexed.
+validated for allowed type,
+size and parsing safety
+before ingestion.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 5 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID Requirement Detailed Statement Priority Acceptance Evidence
+FR-KB-003 Extraction System shall extract text Must Retrieved chunk links back
+and metadata while to source location.
+preserving
+source/page/section
+references when available.
+FR-KB-004 Chunking Ingestion shall create Must Chunk metadata includes
+configurable semantic document id, ordinal and
+chunks with overlap and content hash.
+token counts.
+FR-KB-005 Embedding Approved chunks shall be Must No external embedding
+embedded using a self- API required.
+hosted embedding model
+and stored in pgvector.
+FR-KB-006 Approval Workflow Documents may remain Must Draft documents are
+Draft/Quarantined until excluded from production
+explicitly approved for retrieval.
+agent retrieval.
+FR-KB-007 Versioning Replacing a strategy guide Must Historic setup citations
+shall create a new version; continue resolving.
+previous version remains
+referentially intact.
+FR-KB-008 Citation Response Knowledge answers shall Must Answer includes one or
+identify the more evidence references
+documents/chunks used to where retrieval was used.
+support material strategy
+claims.
+FR-KB-009 Deletion Owner may retire/delete a Should Retired content not
+document; hard deletion retrieved for new analysis.
+shall respect retention and
+references.
+FR-KB-010 Retrieval Filters Retrieval shall filter by Should Filter behavior verified via
+strategy, asset class, deterministic retrieval
+timeframe, source status tests.
+and version when
+specified.
+FR-MKT-001 Provider Connections System shall support one Must Provider-specific payload
+or more mapped to common
+exchange/broker/market- schema.
+data connectors through a
+normalized adapter
+interface.
+FR-MKT-002 Instrument Catalog Owner shall configure Must Disabled symbol not
+enabled symbols, scanned.
+exchanges, asset class and
+allowed timeframes.
+FR-MKT-003 Historical Candles System shall retrieve and Must Missing ranges are
+persist historical OHLCV detectable.
+needed for backtests and
+indicators.
+FR-MKT-004 Live Market Stream System shall consume Must Reconnect behavior
+streaming or polling data preserves continuity or
+and update candle state. marks gaps.
+FR-MKT-005 Data Freshness Each market snapshot Must Stale data blocks
+shall carry READY_FOR_REVIEW
+provider/event/receive signal.
+timestamps and freshness
+status.
+FR-MKT-006 Data Quality System shall detect Must Anomaly logged and
+duplicate, out-of-order, affected scan marked
+impossible or gapped degraded.
+candles.
+FR-MKT-007 Indicator Engine Backend shall calculate Must Same candle fixture yields
+configured indicators reproducible indicator
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 6 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID Requirement Detailed Statement Priority Acceptance Evidence
+deterministically from result.
+normalized candles.
+FR-MKT-008 Market Session Metadata Scanner may label sessions Should Session derived from
+such as Asia/London/New timestamp, not LLM.
+York according to
+configurable timezone
+rules.
+FR-MKT-009 Rate-Limit Protection Connector shall respect Must 429 responses do not cause
+provider quotas with retry storm.
+backoff, caching and
+request budgeting.
+FR-MKT-010 Provider Failover Optional secondary Could Failover is auditable and
+provider may be source attribution
+configured for read retained.
+continuity.
+FR-STR-001 Strategy Definition Owner shall create a Must Published strategy has
+named strategy containing version and immutable
+scope, timeframes, entry snapshot.
+rules, exclusions,
+invalidation and target
+logic.
+FR-STR-002 Rule Types Strategy engine shall Must Rule tests cover
+support boolean, true/false/unknown
+threshold, comparison, outcomes.
+sequence and composite
+AND/OR predicates.
+FR-STR-003 Rule Evidence Each evaluated rule shall Must Setup detail can show why
+persist input values, every rule passed/failed.
+outcome and evidence
+reference.
+FR-STR-004 Unknown Handling Missing/ambiguous Must UNKNOWN required rule
+required evidence shall prevents full qualification.
+evaluate to UNKNOWN
+rather than pass.
+FR-STR-005 Strategy Versioning Publishing changes shall Must Historic scans retain
+create a new immutable strategy_version_id.
+version.
+FR-STR-006 Strategy Scope Strategy may restrict Must Scanner only evaluates
+symbols, asset classes, eligible combinations.
+sessions and timeframes.
+FR-STR-007 Score Model Optional weighted scoring Should Mandatory false always
+may rank qualified/near- blocks regardless of score.
+qualified setups without
+overriding mandatory
+rules.
+FR-STR-008 Backtest Binding Every backtest run shall Must Run is reproducible from
+bind exact strategy metadata.
+version, data set
+fingerprint and engine
+version.
+FR-STR-009 Manual Test Cases Maintainer shall store Should Publishing can require
+positive/negative fixtures passing fixtures.
+for strategy rules.
+FR-STR-010 Dry Run Owner may run strategy Must No notification records
+against a selected created in dry-run mode.
+historical window without
+producing notifications.
+FR-VIS-001 Screenshot Upload User shall submit Must Image receives durable id
+screenshots from mobile and analysis job.
+app or linked Telegram
+bot.
+FR-VIS-002 Image Safety System shall validate Must Oversized or unsupported
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 7 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID Requirement Detailed Statement Priority Acceptance Evidence
+image size/type and strip files rejected safely.
+unnecessary metadata.
+FR-VIS-003 Context Extraction Vision agent shall identify Must Low-confidence extraction
+visible marked uncertain.
+symbol/timeframe/labels/a
+nnotations when
+reasonably observable.
+FR-VIS-004 Market Verification When symbol/timeframe Must Final response
+can be resolved, distinguishes visual
+screenshot interpretation inference from verified
+should be cross-checked data.
+against deterministic
+market data.
+FR-VIS-005 No Fabricated Precision Vision agent shall not Must Unverifiable values
+invent exact entry/price represented as
+values that cannot be read unknown/approximate.
+or obtained from market
+data.
+FR-VIS-006 Screenshot Retention Owner shall configure Should Expired images removed
+retention period for while analysis metadata
+screenshots. may remain per policy.
+FR-RISK-001 Risk/Reward Risk engine shall calculate Must Calculation covered by
+entry, stop distance, target unit tests.
+distance and R multiple
+deterministically.
+FR-RISK-002 Minimum RR Strategy can define Must Below threshold blocks
+minimum acceptable R:R. qualifying state.
+FR-RISK-003 Position Risk Metadata System may calculate Should Calculation never places
+hypothetical position size live order.
+based on configured paper
+account and max risk %.
+FR-RISK-004 Invalidation Every qualified setup must Must No READY_FOR_REVIEW
+have explicit without invalidation.
+invalidation/stop logic or
+be marked incomplete.
+FR-RISK-005 Freshness Gate Risk gate shall reject or Must Freshness reason
+degrade setup on persisted.
+stale/missing market data.
+FR-RISK-006 Spread/Volatility Gate Where data exists, strategy Should Thresholds are
+may block extreme configurable and
+spread/volatility deterministic.
+conditions.
+FR-RISK-007 Duplicate Exposure Paper portfolio may warn Could Warning appears before
+when multiple setups paper entry.
+create concentrated
+exposure.
+FR-RISK-008 No Guaranteed Language Generated user-facing Must Template/policy tests
+message shall avoid enforce vocabulary
+certainty/guaranteed-profit constraints.
+wording.
+FR-SIG-001 Signal States Signal engine shall support Must Transitions follow defined
+NO_SETUP, WATCH, state machine.
+CANDIDATE,
+READY_FOR_REVIEW,
+INVALIDATED, EXPIRED
+and CLOSED states.
+FR-SIG-002 Publish Gate Only policy-approved Must Internal candidates can
+states may produce user remain silent.
+alerts.
+FR-SIG-003 Deduplication System shall suppress Must Repeated scan does not
+duplicate alerts for same spam Telegram/mobile.
+setup/version within
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 8 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID Requirement Detailed Statement Priority Acceptance Evidence
+configured window.
+FR-SIG-004 Explanation Alert shall include strategy, Must No unexplained
+symbol, timeframe, READY_FOR_REVIEW alert.
+direction, matched/missing
+rules, risk data and
+timestamp.
+FR-SIG-005 Expiry Setup shall expire Must Expired setup cannot be
+according to strategy rule, presented as active.
+candle count or timestamp.
+FR-SIG-006 Retraction If data correction Should Audit preserves original
+invalidates a published and retraction.
+setup, system may issue an
+explicit retraction/update.
+FR-SIG-007 Human Review Owner can mark setup Must Action recorded with
+Accepted, Ignored, Entered timestamp.
+Paper, or Dismissed with
+optional notes.
+FR-SIG-008 No Live Execution Baseline signal service Must Security test verifies no
+shall not contain live trade path.
+credentials or methods
+capable of live order
+submission.
+FR-UX-001 Mobile Dashboard Mobile app shall show Must Data refreshes without
+service health summary, exposing server secrets.
+active setups, watchlist
+and recent alerts.
+FR-UX-002 Ask AI User may ask natural- Must Answer shows
+language questions against source/context boundaries.
+approved private
+knowledge and current
+setup context.
+FR-UX-003 Setup Detail User shall inspect rule-by- Must Passed/failed/unknown
+rule evidence and risk rules visible.
+assessment for each setup.
+FR-UX-004 Telegram Commands Bot shall support concise Must Unauthorized chats get no
+commands and free-text private details.
+questions for linked
+owner.
+FR-UX-005 Notification Preferences User may choose channels, Should Preferences honored by
+symbols, strategies, notification worker.
+severity and quiet hours.
+FR-UX-006 Health View Admin shall view Should Degraded dependency
+provider/model/queue/stor highlighted.
+age/worker health and last-
+success timestamps.
+FR-UX-007 Audit View Owner/admin shall filter Should Sensitive secret values
+audit events by actor, never displayed.
+resource and date.
+FR-JRN-001 Setup Journal Every published setup Must Journal traceable to
+shall have a journal record signal/setup ids.
+with strategy and source
+evidence.
+FR-JRN-002 Outcome Tracking System shall determine or Must Outcome includes
+allow confirmation of methodology/version.
+target/stop/expiry
+outcomes using
+deterministic price history.
+FR-JRN-003 Manual Notes User may add Must Edits versioned or
+text/tags/screenshots to a auditable.
+journal entry.
+FR-JRN-004 Metrics System shall compute win Must Metrics derived from
+rate, expectancy, avg R,
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 9 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID Requirement Detailed Statement Priority Acceptance Evidence
+drawdown proxy, defined sample set.
+performance by
+strategy/symbol/timeframe
+/session.
+FR-JRN-005 Sample Warnings Analytics shall show Should Configurable minimum N.
+sample size and warn
+when conclusions are
+based on insufficient
+observations.
+FR-JRN-006 Backtest vs Paper Reports shall distinguish Must Datasets cannot be
+Separation historical backtest, accidentally merged
+forward paper and without labels.
+manually recorded
+outcomes.
+FR-OPS-001 Backups System shall perform Must Restore drill
+scheduled encrypted documented/tested.
+backups of PostgreSQL and
+critical object metadata.
+FR-OPS-002 Model Registry Admin shall configure Must Agent run stores model
+active model, model identity.
+version/hash, quantization
+and serving endpoint.
+FR-OPS-003 Prompt Versioning System shall version Must Historic response
+system prompts/workflow reproducible/auditable.
+templates and persist
+version used per agent
+run.
+FR-OPS-004 Queue Visibility Admin shall inspect Should Failed job can be retried
+pending/retrying/dead- safely.
+letter jobs.
+FR-OPS-005 Kill Switch Admin shall disable Must Kill switch effective
+market scans and without redeploy.
+outbound alerts
+independently.
+FR-OPS-006 Config Change Audit Changes to strategies, Must Before/after metadata
+thresholds, model config, retained without secrets.
+connectors and
+notification policy shall be
+audited.
+FR-OPS-007 Secrets Provider credentials and Must Secret scanners find no
+signing keys shall be stored committed credentials.
+outside source code and
+database plaintext.
+FR-OPS-008 Export Owner may export Should Export excludes secrets by
+strategies, journal and default.
+configuration metadata for
+backup/portability.
+5. Detailed Use Cases
+Use Case Preconditions Main Flow Alternates / Exceptions Success Criteria
+UC-01 Ask a strategy Owner authenticated User asks a question in No relevant source: system Question, retrieval ids,
+question mobile/Telegram. states that the private prompt/model versions
+Orchestrator classifies it as knowledge base does not and response are logged.
+knowledge query; contain enough evidence
+Knowledge Agent retrieves instead of inventing a
+approved chunks; model strategy rule.
+composes answer using
+retrieved evidence;
+response returns citations.
+UC-02 Analyze a chart Linked/authenticated user Upload -> image validation Unreadable chart, Response labels visual
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 10 =====
+Private Self-Hosted AI Trading Copilot Platform
+Use Case Preconditions Main Flow Alternates / Exceptions Success Criteria
+screenshot and valid image -> Vision Agent extraction unsupported symbol, stale observations vs verified
+-> optional market data, low- market facts.
+symbol/timeframe confidence symbol
+resolution -> market resolution.
+snapshot fetch -> relevant
+strategy retrieval ->
+strategy/risk evaluation ->
+explanation.
+UC-03 Automatic setup Enabled Scheduler/stream event -> Provider failure, gap, stale No alert unless publish
+scan strategy/symbol/timeframe feature calculation -> candle, duplicate setup, policy passes.
+and healthy market feed cheap prefilter -> full risk gate failure.
+deterministic strategy
+evaluation -> optional AI
+explanation -> risk gate ->
+signal policy ->
+notification.
+UC-04 Review alert Existing active signal User opens setup -> views Signal expired or State/action history
+conditions/evidence -> invalidated before review. retained.
+marks
+accept/ignore/paper-entry
+-> note captured.
+UC-05 Paper trade lifecycle Accepted setup and paper Create hypothetical entry Price gap or ambiguous Outcome methodology
+account -> track stop/targets -> same-candle stop/target persisted.
+close on deterministic ordering uses configured
+conditions -> compute conservative resolution
+realized R -> journal policy.
+outcome.
+UC-06 Publish strategy Draft strategy exists Maintainer edits rules -> Validation/test failure Previous version remains
+revision runs fixtures/backtest -> prevents publish. available for historical
+review -> publish creates traceability.
+immutable version ->
+scanner begins using new
+version.
+UC-07 Ingest new course Valid source file Upload -> quarantine -> Parser error or No unapproved content
+parse -> chunk -> embed -> unsupported content; used by production agents.
+quality checks -> owner document stays
+approval -> becomes failed/quarantined.
+retrievable.
+UC-08 Recover from Provider unavailable Connector enters degraded Partial reconnect with data No setup generated from
+market-data outage mode -> scanner suspends gap triggers backfill before knowingly stale data.
+affected symbols -> retries qualifying signals.
+with backoff -> optional
+failover -> alerts health
+issue -> resumes only after
+freshness criteria.
+6. Non-Functional Requirements
+ID Area Requirement
+NFR-SEC-001 TLS All remote application traffic shall use TLS
+1.2+; TLS 1.3 preferred.
+NFR-SEC-002 Encryption at Rest Database backups and object storage
+containing private content shall be
+encrypted at rest.
+NFR-SEC-003 Network Isolation LLM/VLM inference endpoints shall not be
+directly exposed to the public Internet.
+NFR-SEC-004 Least Privilege Database, worker, bot and connector
+identities shall use minimum required
+permissions.
+NFR-SEC-005 Audit Immutability Security- and trading-relevant audit entries
+shall be append-only to application
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 11 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID Area Requirement
+identities.
+NFR-SEC-006 Secret Redaction Logs and model prompts shall redact API
+keys, tokens and credentials.
+NFR-PERF-001 API Latency Non-AI read endpoints should achieve p95 <
+500 ms under normal single-owner load.
+NFR-PERF-002 Alert Latency For closed-candle strategies, publishable
+alert should be dispatched within 30
+seconds of required candle finalization
+under healthy conditions.
+NFR-PERF-003 Interactive AI Typical text RAG response should begin
+streaming within a target 5 seconds on
+recommended GPU hardware.
+NFR-PERF-004 Vision Typical screenshot analysis should complete
+within 30 seconds on recommended GPU
+hardware.
+NFR-PERF-005 Scanner Scale System shall support at least 100 symbol-
+timeframe strategy combinations at 1m+
+cadence in baseline design, subject to
+provider quotas and server sizing.
+NFR-REL-001 Availability Core API/notification target 99.5% monthly
+availability for self-hosted deployment,
+excluding planned maintenance.
+NFR-REL-002 Idempotency Jobs and webhook handlers shall tolerate
+retry without duplicate persistent side
+effects.
+NFR-REL-003 Graceful Degradation AI outage shall not corrupt deterministic
+market ingestion or historical data.
+NFR-REL-004 Recovery PostgreSQL RPO target <= 24h baseline and
+RTO <= 4h; stricter targets configurable.
+NFR-OBS-001 Structured Logs Services shall emit structured logs with
+correlation id, service, severity and event
+type.
+NFR-OBS-002 Metrics System shall expose
+health/latency/error/queue/model/GPU/provi
+der metrics.
+NFR-OBS-003 Tracing Cross-service agent workflows should be
+traceable by request/run id.
+NFR-AI-001 Grounding Strategy-specific factual claims must be
+grounded in approved knowledge or
+deterministic strategy configuration.
+NFR-AI-002 Uncertainty Model shall express uncertainty where
+screenshot or source evidence is
+insufficient.
+NFR-AI-003 Prompt Injection Retrieved documents/user content shall be
+treated as untrusted data and not allowed to
+override system/tool policies.
+NFR-AI-004 Model Reproducibility Agent execution shall store model id/hash,
+prompt version and key generation
+parameters.
+NFR-MNT-001 Containerization Services shall be deployable as versioned
+containers.
+NFR-MNT-002 Migrations Database schema changes shall be
+performed by ordered, reversible where
+practical migrations.
+NFR-MNT-003 Testability Deterministic rule/risk calculations require
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 12 =====
+Private Self-Hosted AI Trading Copilot Platform
+ID Area Requirement
+unit fixtures and regression tests.
+NFR-PRV-001 Private AI No public LLM or public embedding API
+shall be required in production
+configuration.
+NFR-PRV-002 Telemetry Control Third-party analytics/telemetry shall be
+disabled by default for sensitive content.
+7. Business Rules and Safety Rules
+Rule Statement
+BR-001 A setup is not a prediction guarantee; UI wording must present
+it as a candidate/setup assessment.
+BR-002 Required strategy condition FALSE or UNKNOWN prevents
+READY_FOR_REVIEW unless the version explicitly defines
+otherwise.
+BR-003 Stale market data prevents a new READY_FOR_REVIEW signal.
+BR-004 A published signal must reference one immutable strategy
+version.
+BR-005 No live order execution service exists in baseline production
+deployment.
+BR-006 AI-generated numeric values must be validated by
+deterministic code before being shown as calculated risk
+values.
+BR-007 Knowledge documents must be approved before production
+retrieval.
+BR-008 Historical results must identify whether they come from
+backtest, paper, manual journal or future live execution.
+BR-009 Strategy edits never mutate a version already referenced by a
+setup.
+BR-010 A notification retry must not create a second logical notification
+event.
+8. External Interface Requirements
+8.1 Mobile Application
+ Expo/React Native client communicates only with backend API over HTTPS.
+ Secure token storage uses platform secure storage; no market-provider or model credentials embedded in
+application.
+ Supports dashboard, setups, setup details, Ask AI, screenshot upload, knowledge browser, journal, analytics,
+notification settings, health and security/session settings.
+ Push notifications deep-link to setup detail and must not contain excessive sensitive content on lock screen
+by default.
+8.2 Telegram Bot
+ Webhook preferred over public polling for production when HTTPS endpoint is available.
+ Validate Telegram update and linked chat/user identity on every protected command.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 13 =====
+Private Self-Hosted AI Trading Copilot Platform
+ Bot may receive screenshots/questions, send setup alerts, explain signals and collect simple review actions.
+ Bot shall never expose server secrets, raw system prompts or private resources to unlinked chats.
+8.3 Market Providers
+ Adapters normalize symbols, intervals, OHLCV precision, timestamps and provider errors.
+ Read-only market-data credentials are preferred.
+ Connectors must record provider attribution and enforce quota budgets.
+9. Acceptance and Release Gates
+Release Gate Minimum Exit Criteria
+Gate A - Security No critical/high findings in auth/RBAC/secret handling;
+inference port private; backup restore tested.
+Gate B - Deterministic Correctness Strategy fixtures and risk calculations pass regression suite;
+stale-data gate verified.
+Gate C - RAG Quality Representative questions retrieve expected source sections;
+unsupported questions produce bounded uncertainty.
+Gate D - Vision Quality Known screenshot corpus evaluated; symbol/timeframe
+uncertainty handled correctly; no fabricated precision.
+Gate E - Backtesting Strategy engine produces reproducible results from pinned
+data/version.
+Gate F - Paper Trading Forward paper test completes agreed observation period
+without state/notification integrity defects.
+Gate G - Operations Dashboards, alerts, dead-letter handling, backups and model
+restart procedures tested.
+10. Requirement Traceability Overview
+Requirement Owning Component Primary Data Verification
+FR-AUTH-001 Identity/API Gateway users, sessions, telegram_accounts, Unit + integration + acceptance
+audit_events
+FR-AUTH-002 Identity/API Gateway users, sessions, telegram_accounts, Unit + integration + acceptance
+audit_events
+FR-AUTH-003 Identity/API Gateway users, sessions, telegram_accounts, Unit + integration + acceptance
+audit_events
+FR-AUTH-004 Identity/API Gateway users, sessions, telegram_accounts, Unit + integration + acceptance
+audit_events
+FR-AUTH-005 Identity/API Gateway users, sessions, telegram_accounts, Unit + integration + acceptance
+audit_events
+FR-AUTH-006 Identity/API Gateway users, sessions, telegram_accounts, Unit + integration + acceptance
+audit_events
+FR-KB-001 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-002 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-003 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-004 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-005 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 14 =====
+Private Self-Hosted AI Trading Copilot Platform
+Requirement Owning Component Primary Data Verification
+FR-KB-006 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-007 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-008 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-009 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-KB-010 Knowledge Service / RAG knowledge_documents, Unit + integration + acceptance
+document_chunks, embeddings
+FR-MKT-001 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-002 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-003 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-004 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-005 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-006 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-007 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-008 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-009 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-MKT-010 Market Data Service providers, instruments, candles, Unit + integration + acceptance
+market_data_gaps
+FR-STR-001 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-002 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-003 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-004 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-005 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-006 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-007 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-008 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-009 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-STR-010 Strategy Engine strategies, strategy_versions, Unit + integration + acceptance
+strategy_rules, rule_evaluations
+FR-VIS-001 Vision Service screenshots, vision_analyses Unit + integration + acceptance
+FR-VIS-002 Vision Service screenshots, vision_analyses Unit + integration + acceptance
+FR-VIS-003 Vision Service screenshots, vision_analyses Unit + integration + acceptance
+FR-VIS-004 Vision Service screenshots, vision_analyses Unit + integration + acceptance
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 15 =====
+Private Self-Hosted AI Trading Copilot Platform
+Requirement Owning Component Primary Data Verification
+FR-VIS-005 Vision Service screenshots, vision_analyses Unit + integration + acceptance
+FR-VIS-006 Vision Service screenshots, vision_analyses Unit + integration + acceptance
+FR-RISK-001 Risk Engine risk_assessments Unit + integration + acceptance
+FR-RISK-002 Risk Engine risk_assessments Unit + integration + acceptance
+FR-RISK-003 Risk Engine risk_assessments Unit + integration + acceptance
+FR-RISK-004 Risk Engine risk_assessments Unit + integration + acceptance
+FR-RISK-005 Risk Engine risk_assessments Unit + integration + acceptance
+FR-RISK-006 Risk Engine risk_assessments Unit + integration + acceptance
+FR-RISK-007 Risk Engine risk_assessments Unit + integration + acceptance
+FR-RISK-008 Risk Engine risk_assessments Unit + integration + acceptance
+FR-SIG-001 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-SIG-002 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-SIG-003 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-SIG-004 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-SIG-005 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-SIG-006 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-SIG-007 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-SIG-008 Signal Service setups, signals, signal_events Unit + integration + acceptance
+FR-UX-001 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-UX-002 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-UX-003 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-UX-004 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-UX-005 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-UX-006 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-UX-007 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-JRN-001 Journal/Analytics paper_trades, journal_entries, Unit + integration + acceptance
+performance_snapshots
+FR-JRN-002 Journal/Analytics paper_trades, journal_entries, Unit + integration + acceptance
+performance_snapshots
+FR-JRN-003 Journal/Analytics paper_trades, journal_entries, Unit + integration + acceptance
+performance_snapshots
+FR-JRN-004 Journal/Analytics paper_trades, journal_entries, Unit + integration + acceptance
+performance_snapshots
+FR-JRN-005 Journal/Analytics paper_trades, journal_entries, Unit + integration + acceptance
+performance_snapshots
+FR-JRN-006 Journal/Analytics paper_trades, journal_entries, Unit + integration + acceptance
+performance_snapshots
+FR-OPS-001 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-OPS-002 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-OPS-003 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-OPS-004 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-OPS-005 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-OPS-006 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-OPS-007 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+FR-OPS-008 API / Operations notifications, configs, audit_events Unit + integration + acceptance
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 16 =====
+Private Self-Hosted AI Trading Copilot Platform
+11. Glossary
+Term Meaning
+Setup A potential trade condition detected from a versioned strategy;
+not necessarily publishable.
+Signal A user-facing lifecycle record produced from a setup after
+policy/risk gates.
+RAG Retrieval-Augmented Generation using the owner's approved
+private resources.
+R multiple Reward or realized outcome normalized by initial risk.
+BOS Break of structure, defined per the owner's strategy rather than
+assumed universally.
+Liquidity Sweep A strategy-specific structural concept that must be
+operationalized by explicit rules.
+VLM Vision-language model used to interpret chart screenshots.
+Inference Server Private service exposing self-hosted model inference to backend
+services only.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 17 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix A - Detailed Screen and UX Requirements
+Screen Required Content / Behavior Safety / Validation Related Requirements
+Login / MFA Email/password, TOTP No provider/model secrets AUTH-001..006
+challenge, device/session exposed.
+naming, clear offline/error
+state.
+Home Dashboard Service health badge, active Stale market health visibly UX-001, MKT-005
+setups, watchlist, latest alerts, blocks confidence.
+quick Ask AI, upload
+screenshot.
+Setup List Filter by strategy, market, Expired/invalidated visually SIG-001..007
+timeframe, direction, state, distinct.
+date; sort newest/score.
+Setup Detail Entry zone, stop, targets, R:R, Every displayed computed STR-003,RISK-001..
+strategy version, market as-of, number tied to deterministic
+rule table, evidence, warnings, calculation.
+history, user action buttons.
+Ask AI Thread view, optional Unsupported answer must say KB-008, AI NFRs
+setup/strategy context, insufficient evidence.
+citations/source chips, model
+activity indicator.
+Screenshot Analysis Upload/camera share, analysis User can correct misidentified VIS-001..006
+status, detected symbol/timeframe before re-
+symbol/timeframe with analysis.
+confidence, visual findings,
+verified market facts, relevant
+strategy/risk.
+Knowledge Library Documents, type, version, Draft/unapproved status KB-001..010
+ingestion status, approval, explicit.
+source metadata, retire action.
+Strategy Editor Metadata, scope, rule builder, Publishing requires validation STR-001..010
+required/optional, score and creates immutable
+weights, invalidation/target version.
+policy, fixtures, draft/publish.
+Backtests Create run, pinned No look-ahead; run metadata STR-008,JRN-006
+strategy/data window, immutable.
+progress, summary metrics,
+trade samples, assumptions,
+export.
+Paper Portfolio Open paper trades, risk Clearly labeled PAPER; never RISK/JRN
+amount, entry/stop/targets, confused with live account.
+status, event timeline, realized
+R.
+Journal Setup/trade notes, tags, System and manual edits JRN-001..003
+screenshots, outcomes, attributable.
+strategy version.
+Analytics Performance cohorts by Backtest and forward paper JRN-004..006
+strategy/symbol/timeframe/ses results separated.
+sion, sample count, win rate,
+avg R, expectancy, drawdown
+proxy.
+Notifications Telegram/push toggles, filters, Critical system health can UX-005
+quiet hours, test notification. optionally override quiet
+hours.
+Security Sessions Sessions/devices, Telegram Sensitive tokens never AUTH-002..006
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 18 =====
+Private Self-Hosted AI Trading Copilot Platform
+Screen Required Content / Behavior Safety / Validation Related Requirements
+link status, MFA, revoke displayed.
+actions.
+System Health Market provider freshness, Admin only. OPS-004..
+model status, queues, DB,
+storage, worker, last backup.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 19 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix B - Detailed Acceptance Test Catalogue
+Test ID Area Scenario Expected Result
+AT-001 Auth Invalid password for known Same generic error; attempt
+and unknown email audited.
+AT-002 Auth Revoked refresh session Refresh denied and session
+remains revoked.
+AT-003 Telegram Unlinked user sends /setups No private data; linking
+guidance only.
+AT-004 Knowledge Upload unsupported Rejected before indexing.
+executable
+AT-005 Knowledge Query strategy fact present in Answer cites expected source
+approved guide section.
+AT-006 Knowledge Query unsupported fact Answer explicitly states
+insufficient private evidence.
+AT-007 Knowledge Prompt-injection text inside Retrieved instruction does not
+PDF alter system/tool policy.
+AT-008 Market Candle stream disconnect Connector degraded and
+signal generation blocked
+until fresh.
+AT-009 Market Duplicate candle Upsert/duplicate handling
+does not double-trigger setup.
+AT-010 Market Gap in required history Affected feature unknown and
+required rule cannot pass.
+AT-011 Strategy Required rule false but score Setup cannot reach
+high READY_FOR_REVIEW.
+AT-012 Strategy Optional rule unknown Score/notes reflect unknown
+without pretending pass.
+AT-013 Strategy Publish version then edit Edit creates new
+draft/version; historic version
+unchanged.
+AT-014 Risk RR below threshold Hard blocker recorded and no
+publishable signal.
+AT-015 Risk Entry=stop invalid data Calculation rejected safely; no
+divide by zero.
+AT-016 Signal Same setup rescanned No duplicate user alert within
+dedupe policy.
+AT-017 Signal Setup expires State becomes EXPIRED; no
+longer active.
+AT-018 Vision Unreadable price labels Response avoids exact price
+claims.
+AT-019 Vision Detected symbol disagrees Re-run uses user-confirmed
+with user correction symbol and records override.
+AT-020 Notification Telegram 429 Retry per provider backoff; no
+logical duplicate.
+AT-021 Paper Target and stop touched in Configured conservative
+same candle without tick ambiguity policy applied and
+order recorded.
+AT-022 Analytics Cohort contains only 3 trades Sample warning displayed.
+AT-023 Ops Inference container down AI endpoint degrades; market
+data persistence continues.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 20 =====
+Private Self-Hosted AI Trading Copilot Platform
+Test ID Area Scenario Expected Result
+AT-024 Ops Scanner kill switch enabled No new scans/signals; query
+functionality unaffected.
+AT-025 Backup Restore latest backup to clean Core references and sample
+environment resources resolve successfully.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 21 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix C - Data Validation Requirements
+Field / Domain Validation Rule
+Email Normalized/case-insensitive, RFC-like practical validation,
+max 320 chars.
+Password Minimum length/policy configurable; never logged;
+breached-password check optional offline.
+Telegram IDs 64-bit integer; authority based on numeric id, not username.
+Symbol Must resolve to enabled canonical instrument/provider
+mapping.
+Timeframe Allowlisted enum; no arbitrary SQL/interval injection.
+Prices Positive NUMERIC within instrument precision; tick
+alignment checked where appropriate.
+Strategy weight Non-negative; configured total may normalize but is not
+required to equal 100.
+Rule expression Validated against allowlisted DSL schema; unknown
+operators rejected.
+Screenshot Allowed MIME, max bytes/pixels, decoded dimensions
+verified independent of file extension.
+Documents Allowed type/size, checksum, parser timeout and safe
+filename handling.
+Date ranges start < end; maximum query/backtest window enforced by
+role/config.
+Pagination bounded page size; stable sort key to avoid
+duplicate/missing records.
+Free text Length bounded; stored/escaped; never interpreted as
+executable SQL/shell/template code.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 22 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix D - Notification Content Requirements
+ Every trading alert must include symbol, timeframe, direction/status, strategy name/version, market
+timestamp, and a clear indication that it is a candidate/setup for review.
+ READY_FOR_REVIEW messages include entry zone/reference, invalidation/stop, at least one target when
+defined, calculated R:R, key passed rules, blockers/warnings if any, and deep link.
+ WATCH/CANDIDATE alerts, if enabled, must clearly state which required confirmation is still missing.
+ Invalidation/retraction alerts reference the original signal and explain the deterministic reason/state change.
+ System health alerts must be visually distinct from trading alerts.
+ Push lock-screen payloads should be concise; full strategy reasoning opens inside authenticated app.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 23 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix E - Release Definition of Done
+Area Definition of Done
+Product All Must requirements implemented or explicitly waived
+with documented reason.
+Security RBAC/MFA/session controls, private inference, secret scans,
+upload controls and security tests pass.
+Trading Core Rule/risk engines pass unit/golden tests and at least one
+complete end-to-end paper strategy scenario.
+AI RAG and vision evaluation reports meet agreed thresholds;
+unsupported queries are bounded.
+Operations Monitoring, backups, restore test, runbooks, kill switches
+and dependency health checks verified.
+Documentation Deployment, configuration, strategy authoring,
+backup/restore and incident response documented.
+Data Migration scripts reviewed; test restore and retention jobs
+pass.
+Mobile/Telegram Authentication/linking, alerts, screenshot upload and setup
+review pass acceptance tests.
+Software Requirements Specification | 2.0 - Detailed Engineering Specification | October 2026

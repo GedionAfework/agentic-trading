@@ -1,0 +1,1291 @@
+
+
+===== PAGE 1 =====
+PRIVATE AI TRADING COPILOT
+Complete Implementation Roadmap
+Crypto + Forex | Decision Agent | Self-Hosted AI | Mobile + Telegram
+Baseline stack: Python 3.12, uv, FastAPI, PostgreSQL/pgvector, Redis, Celery, Ollama, Qwen, Expo React Native,
+Telegram Bot API
+Prepared as an implementation-grade build plan grounded in the supplied NaolDesk strategy/course materials and
+expanded with explicit engineering recommendations.
+Version 1.0 | October 2026
+1
+
+===== PAGE 2 =====
+1. How to Use This Roadmap
+This document is intended to be used as the build sequence for the complete system, not as a product pitch.
+Every major module includes purpose, recommended technologies, concrete implementation tasks, data
+contracts, test requirements, acceptance criteria, and dependencies. The order matters: the system must first be
+able to reproduce the strategy deterministically and backtest it before a Decision Agent is allowed to issue live
+recommendations.
+Two types of content are deliberately separated throughout the document:
+ SOURCE-DERIVED REQUIREMENT - based on the trading framework/course files you supplied. These
+requirements preserve the framework terminology and are not silently replaced by generic trading advice.
+ ENGINEERING RECOMMENDATION - a software architecture, technology, safety, or implementation decision
+proposed to make the system reliable, testable, private, and maintainable.
+The initial production system is a trading copilot. It may recommend ENTER_LONG, ENTER_SHORT, WAIT,
+HOLD, REDUCE, TAKE_PARTIAL_PROFIT, EXIT, INVALIDATED, or NO_SETUP. Automatic money-moving
+execution is not part of the initial release. An execution service is designed only as a future isolated extension.
+1.1 Source baseline understood from the supplied materials
+Area Current understanding
+Trading framework Wyckoff + Harmonic Divergence Matrix + Auction
+Market Theory.
+Core relationship Volume = Effort; Price = Result. Harmony supports
+continuation; divergence warns of reversal.
+Timeframes Weekly/Monthly = HTF structure/Wyckoff; Daily/4H =
+setup/trend/entry zone; 1H/30m = order flow, volume,
+entry timing.
+Core signal gate LONG/SHORT requires BOS, volume harmony,
+accumulation/distribution context, market imbalance in
+the trade direction, HTF alignment; otherwise WAIT.
+Five-question pre-entry gate Confirmed BOS + volume; harmonious volume; Smart
+Money state; structural stop beyond hunt zone; R:R at
+least 1:2. Any NO => WAIT.
+Crypto context BTC, ETH, SOL, BNB plus order books, CVD, open
+interest, funding, liquidations, spot premium/discount,
+ETF flows, margin data, macro and news.
+Execution concepts Safer retest entry; aggressive confirmation entry;
+structure-based SL; staged TP1/TP2/TP3; exit on
+structural reversal/climax rules.
+Additional course concepts seen in screenshots Wyckoff events, breaker blocks, FVG/gaps, liquidity,
+correlation, portfolio risk, expected value, drawdown,
+pyramiding, journaling and discipline.
+1.2 Known source gaps that must remain explicit
+ The supplied material is much stronger for crypto than for Forex. Forex-specific application rules, volume
+proxies, and example trades are not yet fully specified by the sources.
+ Terms such as “significant volume”, “low-volume retest”, “wide/narrow range”, and some pattern definitions
+are conceptually described but still require measurable thresholds before they can become deterministic
+code.
+2
+
+===== PAGE 3 =====
+ Risk guidance in the supplied materials includes multiple contexts (e.g., a personal max-risk rule and
+broader course material on smaller risk after consistency). The software must store risk policies as
+configurable/versioned policies instead of hard-coding one percentage.
+ Course screenshots contain both useful and irrelevant/duplicate material. A curation stage is required before
+RAG ingestion or dataset creation.
+3
+
+===== PAGE 4 =====
+2. Product Vision, Scope and Non-Goals
+2.1 Product vision
+Build a private, self-hosted, multi-market trading intelligence platform that continuously ingests Crypto and
+Forex market data, understands the supplied trading framework, detects and validates setups, learns from
+historical outcomes, explains its reasoning, and delivers clear decisions through a mobile application and
+Telegram. The system should combine deterministic rule execution, statistical/ML decisioning, a private LLM,
+multimodal screenshot analysis, RAG over trusted resources, backtesting, paper trading, journaling, and
+analytics.
+2.2 Supported asset classes
+Asset class V1 scope Later expansion
+Crypto Spot market intelligence; BTC/USDT, Perpetual/futures context; additional
+ETH/USDT, BNB/USDT, SOL/USDT exchanges; automated execution
+first; market-wide watchlists only after separate approval.
+configurable.
+Forex Major FX pairs after a validated data Minor/exotic pairs after
+provider and Forex adaptation rules liquidity/spread filters and sufficient
+are defined. backtest data.
+Metals Optional XAU/USD treated as a Additional commodities after
+separate instrument profile rather market-specific validation.
+than assumed identical to FX majors.
+2.3 Decision action space
+NO_SETUP
+WATCH
+WAIT_FOR_CONFIRMATION
+ENTER_LONG
+ENTER_SHORT
+HOLD
+REDUCE
+TAKE_PARTIAL_PROFIT
+EXIT
+INVALIDATED
+EXPIRED
+The Decision Agent must never be forced to choose BUY or SELL. WAIT and NO_SETUP are first-class outcomes. A
+risk or policy gate may veto an otherwise favorable model prediction.
+2.4 Non-goals for V1
+ No autonomous live order placement.
+ No promise of profitability or guaranteed prediction accuracy.
+ No use of public LLM APIs for core analysis in production; the design uses self-hosted inference.
+ No scraping of a website when an official/licensed API or downloadable dataset is available.
+ No model-generated risk values or confidence numbers without deterministic/statistical support.
+4
+
+===== PAGE 5 =====
+3. Final Technology Stack
+Layer Choice Why
+Primary backend language Python 3.12 Strongest fit for AI, ML, RAG, backtesting,
+market-data analysis, scientific
+computing and model orchestration.
+Package/project manager uv Single source for Python version, virtual
+environment, dependency locking, scripts
+and reproducible installs.
+Backend API FastAPI Async APIs, WebSockets, typed
+request/response models and Python-
+native AI integration.
+Validation/contracts Pydantic v2 Typed structured outputs for agents,
+tools, APIs and events.
+ORM SQLAlchemy 2 async Mature relational persistence with
+explicit async sessions.
+Migrations Alembic Version-controlled schema changes.
+Database PostgreSQL 16+ Primary transactional and analytical
+relational store.
+Vector search pgvector Embeddings live beside document
+metadata and strategy data.
+Cache/broker Redis Caching, locks, rate limits and Celery
+broker/result backend.
+Workers Celery Long-running ingestion, embeddings,
+backtests, scans, screenshots and
+notifications.
+Local AI runtime Ollama initially Simple private model lifecycle during
+development and low/moderate traffic.
+Production inference option vLLM later Higher throughput and concurrency
+without changing app-facing AI Gateway.
+Main LLM/VLM baseline Qwen3.5 27B class Shared by
+orchestrator/strategy/explanation/vision
+initially; benchmark before final
+production lock.
+Embeddings Qwen3 Embedding 4B class Private semantic retrieval over trusted
+materials.
+Dedicated vision candidate Qwen3-VL 30B class Add only if benchmarked materially
+better on the user’s labeled chart dataset.
+Decision ML LightGBM or XGBoost first Excellent tabular baseline, feature
+importance, fast training, easier
+calibration than an end-to-end neural
+model.
+Numerical stack NumPy, Polars/Pandas Feature generation, ETL and research.
+Charts/backtest visuals Plotly or mplfinance Deterministic chart generation for review
+and vision benchmark datasets.
+Mobile Expo + React Native + TypeScript Cross-platform iOS/Android with push
+notifications.
+Telegram aiogram + Telegram Bot API Webhook-based chat, screenshot uploads
+and setup alerts.
+Object storage MinIO/S3-compatible Screenshots, raw course files, generated
+charts, model artifacts and exports.
+Deployment Docker + Nginx on Ubuntu Reproducible services and TLS reverse
+proxy.
+5
+
+===== PAGE 6 =====
+Layer Choice Why
+CI/CD GitHub Actions Lint, type-check, tests, migrations,
+container build and deployment.
+3.1 Why FastAPI instead of Django for V1
+FastAPI should be the primary backend because the dominant workload is async market data, AI inference,
+model/tool calls, WebSockets, background jobs and numerical pipelines. Django is not required for V1. If a rich
+internal admin panel becomes important later, either build a small React admin or introduce Django Admin as a
+separate internal service rather than coupling the trading core to Django.
+3.2 Python dependency policy
+ Use `uv add` for runtime dependencies and `uv add --dev` for development dependencies.
+ Commit `pyproject.toml` and `uv.lock`; never commit `.venv`.
+ Pin the Python minor version through `.python-version`.
+ CI and production must install from the lockfile; no ad-hoc pip installs on servers.
+uv init --app
+uv python install 3.12
+uv python pin 3.12
+uv add "fastapi[standard]" pydantic-settings httpx orjson tenacity
+uv add "sqlalchemy[asyncio]" asyncpg alembic pgvector
+uv add redis "celery[redis]" ollama aiogram
+uv add numpy polars pandas scikit-learn lightgbm xgboost
+uv add pymupdf python-docx python-pptx pillow
+uv add --dev pytest pytest-asyncio pytest-cov ruff mypy respx
+uv sync
+6
+
+===== PAGE 7 =====
+4. Target System Architecture
+Figure 1. Logical architecture. All internet-facing clients communicate with the FastAPI gateway. Ollama,
+PostgreSQL and Redis stay on a private network and are never directly exposed to the public internet.
+4.1 Core bounded contexts
+Context Responsibilities
+Identity Users, devices, auth tokens, Telegram link, preferences,
+roles.
+Knowledge Uploads, parsing, chunking, embeddings, citations,
+trusted-source hierarchy.
+Market Data Provider adapters, candles, order book, derivatives
+metrics, FX metadata, economic events.
+Feature Engine Market structure, volume/range, liquidity, volatility,
+correlations and derived features.
+Strategy Engine Versioned rule definitions, signal criteria, setup state
+and hard gates.
+Risk Engine Position risk, R:R, exposure, daily/weekly limits,
+correlation and policy veto.
+Decision Intelligence Training datasets, ML models, calibration, similarity
+search, Decision Agent.
+Agent Runtime Orchestration, tools, prompts, structured outputs, model
+logging and guardrails.
+Backtesting Historical replay, slippage/spread/fees, metrics, walk-
+forward evaluation.
+Paper Trading Live simulated execution, fill model, P&L and outcome
+tracking.
+7
+
+===== PAGE 8 =====
+Context Responsibilities
+Journal & Analytics Trade journal, mistakes, lessons, statistics and strategy
+performance.
+Notifications Telegram, Expo push, in-app alerts and delivery
+tracking.
+Operations Audit, metrics, traces, health checks, backups and admin
+settings.
+4.2 Service topology for the first production deployment
+nginx
+-> api (FastAPI)
+-> websocket endpoint
+-> telegram webhook
+workers
+-> ingestion worker
+-> market scanner worker
+-> AI/RAG worker
+-> backtest worker
+-> notification worker
+private services
+-> postgres + pgvector
+-> redis
+-> ollama
+-> minio/s3
+external providers
+-> crypto exchange/data APIs
+-> forex data provider
+-> macro/economic calendar
+-> news feeds
+4.3 One shared AI runtime, multiple logical agents
+The platform should not load eight or nine copies of a 27B model. Logical agents are different policies/toolsets
+around shared model servers. A single main model can serve Orchestrator, Knowledge, Strategy Explanation,
+Signal Explanation, Journal and initial Vision tasks. Embeddings use a dedicated smaller model. A dedicated
+VLM is added only if chart-benchmark results justify the GPU cost.
+5. Repository and uv Workspace Design
+private-trading-ai/
+├── pyproject.toml
+├── uv.lock
+├── .python-version
+├── README.md
+├── apps/
+│ ├── api/ # FastAPI entrypoint
+│ ├── worker/ # Celery app
+│ └── telegram/ # Telegram webhook/handlers
+8
+
+===== PAGE 9 =====
+├── packages/
+│ ├── core/ # config, logging, IDs, time, errors
+│ ├── db/ # SQLAlchemy models/repositories
+│ ├── market_data/ # provider interfaces and normalization
+│ ├── features/ # deterministic feature engine
+│ ├── strategies/ # versioned strategy engine
+│ ├── risk/ # risk and portfolio limits
+│ ├── knowledge/ # parsing, RAG, embeddings
+│ ├── ai_gateway/ # Ollama/vLLM abstraction
+│ ├── agents/ # agent policies/tools/contracts
+│ ├── decision/ # ML model training/inference/calibration
+│ ├── backtest/ # replay engine
+│ ├── paper_trade/ # simulation engine
+│ ├── journal/ # trade journal/analytics
+│ └── notifications/ # Telegram/push/in-app
+├── mobile/ # Expo React Native
+├── infra/ # docker, nginx, compose, monitoring
+├── migrations/
+├── data_contracts/
+├── resources/ # local dev only, gitignored
+├── notebooks/ # research only; never production logic
+└── tests/
+├── unit/
+├── integration/
+├── contract/
+├── strategy/
+├── decision/
+├── rag/
+├── vision/
+└── e2e/
+Use a uv workspace when packages are split into independently testable Python packages. Production logic must
+live under packages/, not inside notebooks. Notebooks may import production modules for research but should
+never become the only implementation of a feature.
+5.1 Development commands
+uv sync
+uv run fastapi dev apps/api/main.py
+uv run celery -A apps.worker.celery_app worker -l INFO
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy packages apps
+uv run alembic upgrade head
+5.2 Branch and change policy
+ `main` is always deployable; use short-lived feature branches.
+ Every strategy-rule change requires a strategy-version increment and test fixture update.
+ Every DB schema change requires an Alembic migration.
+ Every model change requires a model-registry record and evaluation comparison.
+ No feature may bypass the Risk Engine to reach a live recommendation state.
+9
+
+===== PAGE 10 =====
+10
+
+===== PAGE 11 =====
+6. Local Development and Production Environment
+6.1 Windows development setup
+1. Install Git, VS Code, Docker Desktop, uv and Ollama.
+2. Enable virtualization/WSL2 if Docker Desktop requires it.
+3. Verify `uv --version`, `docker --version`, `ollama --version`, and GPU driver visibility if using an NVIDIA GPU.
+4. Run PostgreSQL/pgvector, Redis and MinIO through Docker Compose. Run Ollama on the host initially for
+simpler GPU access.
+5. Create `.env` from `.env.example`; never commit secrets.
+6.2 Production OS
+Use Ubuntu LTS on the production server. Prefer NVIDIA GPUs with sufficient VRAM for the chosen
+quantization/context length. Separate the GPU inference node from the application/database node when traffic
+or reliability requirements justify it.
+6.3 Required environment variables
+Variable Purpose
+APP_ENV development/staging/production
+DATABASE_URL PostgreSQL async URL
+REDIS_URL Redis connection
+OLLAMA_BASE_URL Private Ollama URL
+MAIN_MODEL Main LLM/VLM model ID
+EMBEDDING_MODEL Embedding model ID
+OBJECT_STORAGE_ENDPOINT MinIO/S3 endpoint
+OBJECT_STORAGE_BUCKET Private file bucket
+JWT_SECRET JWT signing secret
+TELEGRAM_BOT_TOKEN Telegram bot token
+TELEGRAM_WEBHOOK_SECRET Webhook validation secret
+MARKET_PROVIDER_KEYS Provider-specific secrets via secure secret store
+MODEL_ARTIFACT_BUCKET ML model registry storage
+7. Market Data Architecture - Crypto and Forex
+7.1 Provider abstraction
+class MarketDataProvider(Protocol):
+async def get_instruments(...) -> list[Instrument]: ...
+async def get_candles(...) -> list[Candle]: ...
+async def subscribe_candles(...) -> AsyncIterator[Candle]: ...
+async def get_quote(...) -> Quote: ...
+async def health(...) -> ProviderHealth: ...
+Strategy code must never consume provider-specific JSON. Every adapter maps external responses into
+normalized internal contracts.
+11
+
+===== PAGE 12 =====
+7.2 Crypto-specific data
+Dataset Priority Use
+OHLCV Required Spot candles and, later, perpetual
+candles.
+Trades Recommended Needed for trade-side delta/CVD where
+provider supports it.
+Order book Recommended Passive liquidity, walls, imbalance and
+execution context.
+Open interest Recommended Derivatives positioning context.
+Funding rate Recommended Perpetual sentiment/crowding context.
+Liquidations Recommended Forced-flow context and liquidation
+clusters.
+Spot/perp basis Recommended Premium/discount and dislocation.
+ETF flows Context For BTC/ETH institutional flow where
+available.
+Exchange status Required Outage/maintenance guardrail.
+Fees/tick size/lot size Required Valid order/position calculations and
+realistic backtests.
+7.3 Forex-specific data
+Dataset Priority Use
+OHLC Required Normalized candle history.
+Bid/ask or spread Strongly recommended Backtests must model spread and
+execution friction.
+Tick volume Recommended Broker-side activity proxy; not treated as
+universal centralized volume.
+Session calendar Required Asia/London/New York windows and
+DST-aware overlap.
+Economic calendar Required High-impact event-risk gating.
+DXY Recommended USD context.
+Rates/yields Recommended Macro context for currency direction.
+Futures proxy volume Optional Additional centralized proxy where
+appropriate and licensed.
+Market holidays Required Avoid false “missing data” and invalid
+signals.
+7.4 Normalized market contracts
+Candle { instrument_id, timeframe, open_time, open, high, low, close, volume, source }
+Quote { bid, ask, mid, spread, timestamp }
+CryptoContext { funding, open_interest, cvd, liquidation_bias, basis }
+ForexContext { session, tick_volume_state, dxy_bias, event_risk, spread_state }
+MarketContext { asset_class, instrument, timeframe, timestamp, candles, regime, features, market_specific_context }
+7.5 Historical data lake policy
+ Keep raw provider payloads immutable in object storage when licensing permits.
+ Store normalized candles and high-value derived series in PostgreSQL/Timescale-like partitions or columnar
+files depending on volume.
+ Record provider, ingest time, source timestamp, and quality flags for every dataset.
+12
+
+===== PAGE 13 =====
+ Never silently forward-fill missing candles used for strategy decisions; missing data must surface as a quality
+failure or explicit gap.
+13
+
+===== PAGE 14 =====
+8. Knowledge Ingestion, Course Curation and RAG
+8.1 Source hierarchy
+Tier 1 - Approved strategy rules and definitions
+Tier 2 - Original course material
+Tier 3 - User annotations and labeled examples
+Tier 4 - Historical trades and generated evaluations
+Tier 5 - Supplementary public research
+Retrieval must prefer higher-authority tiers. A lower-tier public article must never silently override an approved
+Tier-1 rule.
+8.2 Ingestion stages
+6. Virus/type validation and file-size limits
+7. Hash and deduplicate file
+8. Store original object privately
+9. Extract text and page structure
+10. Extract embedded images/screenshots
+11. Remove irrelevant/duplicate pages from the curated corpus
+12. Attach metadata: source, authority tier, course/module/page, concept tags
+13. Chunk semantically by topic, not fixed characters only
+14. Embed chunks with the private embedding model
+15. Index in pgvector
+16. Create retrieval evaluation questions and expected sources
+8.3 Screenshot/course curation requirements
+ The screenshot-heavy DOCX files contain valuable course and trade images but also irrelevant material;
+curation status must be stored per page/image.
+ Preserve page/image provenance so an answer can cite the exact source page or image record.
+ Do not use quiz screenshots as strategy truth unless the corresponding lesson meaning is known and
+approved.
+ Original screenshots from the ZIP are preferred over Word-embedded copies for the vision dataset because
+they preserve resolution and one-image-per-example boundaries.
+8.4 Retrieval response contract
+KnowledgeEvidence {
+query,
+chunks: [{document_id, page, authority_tier, text, score}],
+conflicts: [...],
+sufficient_evidence: bool
+}
+If evidence is insufficient or conflicting, the Knowledge Agent must return that state instead of inventing a
+resolution.
+14
+
+===== PAGE 15 =====
+9. Strategy Engine - Turning the Course into Executable Rules
+9.1 Source-derived concepts that need explicit implementations
+Concept family Implementation requirement
+Market structure Swing high/low, BOS, MSB, optional CHOCH definition.
+Wyckoff Accumulation, distribution, markup, markdown,
+ranging, Spring, UTAD, LPS and other approved events.
+Effort vs Result High/low volume relative to a baseline;
+impulse/correction; wide/narrow range;
+harmony/divergence.
+Liquidity Support/resistance sweeps, stop-hunt logic,
+imbalance/FVG concepts.
+Entry Safer retest path and aggressive first-confirmation path.
+Stop Structure-based invalidation; avoid arbitrary/round
+placement; policy-configurable buffer.
+Exit Opposite structure break, climax behavior, high-volume
+invalidation, staged TP policy.
+Signal gate LONG/SHORT/WAIT and five-question checklist.
+Session Crypto schedule policy and Forex session/calendar
+adaptation.
+Market context Balance vs imbalance and catalyst/news context.
+9.2 Every ambiguous term becomes a versioned parameter or algorithm
+Example: “significant volume increase” cannot remain English-only in the live engine. The implementation must
+define one or more measurable candidate rules, test them on labeled examples, and store the selected rule under
+a strategy version.
+VolumeRule v1 candidate:
+bos_volume_ratio = candle_volume / SMA(volume, 20)
+significant_volume = bos_volume_ratio >= threshold
+RetestVolumeRule v1 candidate:
+retest_volume_ratio = retest_volume / SMA(volume, 20)
+low_volume_retest = retest_volume_ratio <= threshold
+The exact thresholds above are engineering placeholders until validated against the course examples and
+historical data. They must not be presented as source-derived facts.
+9.3 Strategy version object
+StrategyVersion {
+id, strategy_id, semantic_version, status,
+supported_asset_classes, supported_timeframes,
+rule_graph_json, parameter_json,
+risk_policy_id, source_refs,
+created_at, approved_at, supersedes_version_id
+}
+15
+
+===== PAGE 16 =====
+9.4 Rule evaluation output
+StrategyAssessment {
+matched: bool,
+direction: LONG | SHORT | NONE,
+required_conditions: [{name, passed, value, evidence}],
+optional_conditions: [...],
+missing_data: [...],
+invalidations: [...],
+state: WATCH | WAIT_FOR_CONFIRMATION | READY_FOR_RISK | NO_SETUP
+}
+10. Decision Agent - Final Recommendation Brain
+Figure 2. The Decision Agent is not a free-form LLM. It is a constrained decision pipeline. Hard rules and the Risk
+Engine can veto a model prediction. The LLM explains and retrieves evidence; it does not invent the trading
+math.
+10.1 Decision pipeline
+17. Build normalized MarketContext.
+18. Generate deterministic features and strategy-rule outputs.
+19. Apply hard no-trade gates (missing data, session/event restrictions, mandatory rule failure).
+20. Score the candidate with a trained statistical/ML model.
+21. Run the Risk Engine and exposure checks.
+22. Calibrate probability/confidence using out-of-sample results.
+23. Use the LLM to produce an explanation grounded in actual computed values and trusted course evidence.
+24. Persist the full decision snapshot before notification.
+16
+
+===== PAGE 17 =====
+10.2 Initial ML model
+Start with LightGBM or XGBoost rather than training the main LLM. The first decision problem is tabular:
+market structure, volume ratios, volatility, session, order-flow features, strategy conditions, risk values and
+context. Tree boosting is easier to train, explain, calibrate and debug. More complex sequence models may be
+evaluated later against the same holdout datasets.
+10.3 Feature groups
+Feature group Examples
+Identity asset_class, symbol, timeframe, venue/provider.
+Structure trend state, swing distances, BOS/MSB states, distance from key
+levels.
+Wyckoff phase/event candidates, range location, Spring/UTAD/LPS
+features after deterministic definitions exist.
+Volume/Range volume z-score/ratio, candle range percentile,
+impulse/correction metrics, harmony/divergence features.
+Liquidity sweep flags, FVG distance/size, support/resistance proximity,
+breaker/order-block features if approved.
+Volatility ATR, realized volatility, range expansion/contraction.
+Crypto derivatives funding, OI delta, CVD, liquidation metrics, basis.
+Forex macro session, spread, DXY/rates context, economic-event risk.
+Portfolio/risk current exposure, correlated exposure, stop distance, candidate
+R:R.
+Temporal hour/session, weekday, month; crypto weekend flag; Forex
+holiday state.
+Regime trend/range, high/low volatility, risk-on/off proxy if defined.
+Strategy state mandatory condition bitmap, missing-condition count, setup
+stage.
+10.4 Labels and outcome definitions
+Do not train until labels are deterministic. Each labeled example must define decision time, entry assumptions,
+stop/target logic, transaction costs, future horizon and outcome. The same labeling engine must be reusable by
+backtests and training-dataset generation.
+Training label options:
+ENTER_LONG
+ENTER_SHORT
+WAIT
+NO_SETUP
+EXIT
+Outcome fields:
+max_favorable_excursion_R
+max_adverse_excursion_R
+first_event = TP1 | TP2 | TP3 | SL | INVALIDATION | TIMEOUT
+realized_R_under_policy
+bars_to_outcome
+10.5 Data leakage controls
+ Feature timestamps must be <= decision timestamp.
+17
+
+===== PAGE 18 =====
+ Never compute swing confirmation using candles that would not yet have existed at decision time unless the
+strategy explicitly waits for confirmation and the confirmation latency is modeled.
+ Use time-based train/validation/test splits, not random row splits.
+ Keep entire contiguous market periods out-of-sample.
+ Perform walk-forward testing before live paper deployment.
+10.6 Confidence calibration
+Model scores are not automatically probabilities. Calibrate on an untouched validation set (e.g., isotonic or Platt-
+style calibration where appropriate), then monitor reliability diagrams. The LLM must never invent a
+percentage. If calibration is weak, present qualitative confidence bands instead of fake precision.
+10.7 Human feedback loop
+Agent recommendation -> User action -> User reason -> Actual market outcome -> Review label -> Dataset version
+User overrides are valuable training data but must not automatically become ground truth. They should be
+reviewed or weighted based on outcome and rule adherence.
+18
+
+===== PAGE 19 =====
+11. Logical Agent Design
+Agent Responsibility
+1. Orchestrator Routes questions/workflows; selects tools; never
+computes trading values itself.
+2. Knowledge Agent Retrieves approved course/strategy evidence and
+surfaces conflicts or insufficient evidence.
+3. Vision Agent Extracts chart-visible information; verifies
+symbol/timeframe; never trusted alone for a trade.
+4. Market Agent Primarily deterministic tools for live/historical market
+data and feature queries.
+5. Strategy Agent Explains Strategy Engine output and missing/failed
+conditions; cannot bypass rules.
+6. Risk Agent Explains deterministic Risk Engine result; can veto but
+cannot loosen configured limits.
+7. Signal Agent Formats setup lifecycle and notification state; does not
+invent probability.
+8. Journal/Analytics Agent Answers performance questions from computed
+statistics and journal records.
+9. Decision Agent Consumes validated features, ML score, risk result and
+strategy state to issue the final recommendation state.
+11.1 Agent tool permission examples
+Agent Allowed Forbidden
+Knowledge search_chunks, get_strategy_source, market order, change strategy, send
+get_definition signal
+Vision read_image, request_market_verification final trade approval, modify data
+Market get_candles, quote, derivatives context, change strategy/risk policy
+calendar
+Strategy read strategy assessment, retrieve modify rule parameters at runtime
+evidence
+Risk risk calculator, exposure, portfolio state override hard risk limit
+Decision read validated inputs, direct broker execution in V1
+decision_model_predict
+11.2 Structured LLM output requirement
+Every agent-to-agent response must validate against a Pydantic model. Free-form prose is allowed only in the
+final explanation field. If validation fails, retry with a constrained repair prompt; after the retry budget is
+exhausted, fail closed and return a system error rather than guessing.
+12. Risk Engine and Policy Layer
+12.1 Why risk is separate
+A good setup is not automatically an acceptable trade. Risk and portfolio limits are independent vetoes. This also
+resolves differences between personal risk notes, course guidance, paper-trading policies and future account
+sizes without editing strategy code.
+19
+
+===== PAGE 20 =====
+12.2 Configurable risk-policy fields
+RiskPolicy {
+max_risk_pct_per_trade,
+max_risk_amount,
+min_rr,
+max_concurrent_positions,
+max_daily_loss_pct,
+max_weekly_loss_pct,
+max_correlated_exposure_pct,
+max_asset_exposure_pct,
+event_blackout_minutes_before,
+event_blackout_minutes_after,
+weekend_policy,
+allowed_asset_classes,
+leverage_limit,
+stop_buffer_policy
+}
+12.3 Risk calculations
+risk_per_unit = abs(entry - stop)
+allowed_loss = min(account_balance * max_risk_pct, max_risk_amount_if_set)
+quantity_raw = allowed_loss / risk_per_unit
+quantity = normalize_to_lot_step(quantity_raw)
+rr_to_target = abs(target - entry) / risk_per_unit
+For Forex, pip value, quote currency conversion, contract size, spread and lot-step rules must be handled by an
+instrument calculator. For crypto, exchange tick/step/min-notional rules must be validated.
+13. Backtesting and Historical Research
+13.1 Golden rule
+The live Strategy Engine and the backtesting Strategy Engine must share the same core rule code. There must not
+be one “backtest version” and a separate “live version” that drift apart.
+13.2 Backtest simulation requirements
+ Event-driven candle replay with strict timestamp ordering.
+ Configurable fees, spread, slippage and minimum order constraints.
+ No look-ahead bias in features, pivots, macro data or labels.
+ Partial exits and staged TP policy.
+ Signal invalidation and timeout handling.
+ Crypto 24/7 calendar versus Forex market sessions/holidays.
+ Provider-data quality checks and gaps.
+ Version capture: code commit, strategy version, dataset version, risk policy and model version.
+13.3 Metrics
+Metric family Required outputs
+Core trade count, win/loss rate, expectancy in R, average/median R,
+profit factor, maximum drawdown, Sharpe-like risk-adjusted
+metrics where appropriate
+20
+
+===== PAGE 21 =====
+Metric family Required outputs
+Distribution maximum consecutive losses/wins, MFE/MAE, time in trade
+Slices performance by symbol, performance by timeframe,
+performance by session, performance by regime, performance
+by strategy version
+Model calibration by model confidence, cost sensitivity to
+spread/slippage
+13.4 Research protocol
+25. Define rule version before looking at the test period.
+26. Train/fit only on training periods.
+27. Tune thresholds on validation periods.
+28. Lock rules/model, then evaluate once on a holdout test period.
+29. Perform walk-forward replay.
+30. Run paper trading with the same production scanner and models.
+31. Only then enable live alerts.
+14. Paper Trading and Setup Lifecycle
+14.1 State machine
+DETECTED -> ANALYZING -> WATCH -> WAITING_CONFIRMATION -> READY_FOR_REVIEW -> TRIGGERED -> ACTIVE ->
+TP_PARTIAL / EXITED / STOPPED / INVALIDATED / EXPIRED
+Every transition is validated. Completed states cannot return to ACTIVE. Each state change creates an immutable
+event record.
+14.2 Paper fill model
+ Use bid/ask and spread where available; do not fill every limit order merely because the candle touched the
+price unless the fill model explicitly defines that assumption.
+ Model exchange/broker fees and quantity rounding.
+ Support staged entries and staged exits if the approved strategy uses them.
+ Store expected versus simulated fill and slippage assumptions.
+15. Vision and Screenshot Analysis
+15.1 Runtime screenshot workflow
+Upload -> private object storage -> VLM extraction -> symbol/timeframe confidence -> retrieve actual market data ->
+deterministic feature verification -> strategy/risk/decision pipeline -> response
+The screenshot is supporting evidence, never the sole source of truth when actual market data is available.
+15.2 Vision benchmark dataset
+ Use original historical screenshots where possible.
+ Create manual labels for symbol, timeframe, direction, key zones, BOS/MSB, visible volume state, setup stage
+and final action.
+ Include valid, invalid and WAIT examples - not only attractive winners.
+ Generate synthetic charts from historical OHLCV with known labels to expand objective test coverage.
+21
+
+===== PAGE 22 =====
+ Benchmark main multimodal model versus dedicated VLM on 200-500 labeled charts before adding the
+extra model.
+16. Telegram Bot Functional Specification
+Capability Behavior
+/start Link Telegram identity to account; explain privacy and
+capabilities.
+/setups Show active/watch/ready setups.
+/markets Show monitored instruments and scanner status.
+/strategies Show active strategy versions and supported markets.
+/journal Recent paper/live-reviewed trade journal entries.
+/performance Computed performance summaries; never LLM-
+invented statistics.
+/settings Notification filters, asset classes, timeframes, quiet
+hours.
+Text question Route to Orchestrator/Knowledge/Market tools.
+Screenshot upload Run vision + verification workflow.
+Document upload Optional knowledge ingestion with explicit user
+confirmation and authority tier.
+Alert buttons View Setup, Why?, Dismiss, Mark Reviewed, Record My
+Decision.
+16.1 Example Telegram setup message
+BTC/USDT - 1H
+Decision: WAIT_FOR_CONFIRMATION
+Direction bias: LONG
+Passed:
+HTF bullish
+bullish BOS
+volume harmony
+Missing:
+low-volume retest
+Next trigger:
+retest of approved zone + volume threshold
+Risk status: NOT EVALUATED UNTIL ENTRY EXISTS
+[View evidence] [Why?] [Dismiss]
+17. Mobile App Functional Specification
+Screen/Feature Requirements
+Authentication Email/password or approved auth method; device sessions;
+secure token storage.
+Dashboard Scanner health, market regime summary, active setups, recent
+22
+
+===== PAGE 23 =====
+Screen/Feature Requirements
+decisions.
+Market Watch Crypto/Forex filters, instrument detail, timeframe state,
+upcoming event risk.
+Setup Feed WATCH/WAIT/READY/ACTIVE filters and confidence/evidence
+summary.
+Setup Detail Decision, rule checklist, chart, entry/SL/TP if applicable, risk
+result, model score, similar historical setups, course evidence.
+AI Chat Ask strategy/market/journal questions; screenshot attachment;
+cite internal knowledge sources.
+Screenshot Analysis Upload/camera; extraction, market verification and final
+decision.
+Strategies Read-only active rules for normal user; version history and
+source references.
+Journal Automatic entry plus manual notes, mistakes, lesson learned
+and user decision.
+Analytics Win/loss, expectancy, drawdown, R distribution,
+symbol/timeframe/session slices.
+Notifications Push history, delivery state, per-market/timeframe settings.
+Settings Risk-policy selection if authorized, model privacy info, account
+linking, data export/delete.
+18. API and WebSocket Surface
+Endpoint Purpose
+POST /auth/login Authenticate.
+POST /auth/refresh Rotate access token.
+GET /markets List supported instruments.
+GET /markets/{id}/snapshot Normalized market context.
+GET /setups Filter setup lifecycle.
+GET /setups/{id} Detailed setup/evidence.
+POST /analysis/question Ask orchestrated question.
+POST /analysis/screenshot Create screenshot-analysis job.
+GET /analysis/{job_id} Poll result if not using WebSocket.
+POST /knowledge/documents Upload trusted resource.
+GET /knowledge/documents List resources/authority.
+POST /backtests Start backtest job.
+GET /backtests/{id} Metrics/results.
+POST /paper-trading/enable Enable selected paper scanner after validation.
+GET /journal Journal records.
+GET /analytics/performance Computed analytics.
+POST /feedback/decision Record human accept/reject and reason.
+POST /telegram/webhook Telegram webhook.
+WS /ws Realtime setup/job/notification updates.
+23
+
+===== PAGE 24 =====
+18.1 Idempotency and request IDs
+ Every state-changing POST from external clients uses an idempotency key when retry duplication would be
+harmful.
+ Every request gets a correlation/request ID; propagate it through Celery tasks, agent runs and notification
+deliveries.
+19. Database Design - Table Inventory
+Domain Tables
+Identity users, user_sessions, devices, telegram_accounts, roles,
+user_roles, notification_preferences
+Knowledge documents, document_versions, document_pages,
+document_chunks, chunk_embeddings, document_tags,
+document_authority
+Strategy strategies, strategy_versions, strategy_rules, rule_parameters,
+strategy_sources, strategy_examples
+Market providers, instruments, instrument_aliases, timeframes,
+candles, quotes, crypto_derivatives_snapshots,
+forex_context_snapshots, economic_events, data_quality_events
+Features feature_definitions, feature_values or materialized feature
+stores as needed, market_snapshots
+Decision dataset_versions, training_examples, model_versions,
+model_metrics, decision_predictions, calibration_metrics,
+similar_setup_links
+Agent agent_runs, agent_steps, tool_calls, model_requests,
+model_responses
+Trading setups, setup_conditions, risk_assessments, decisions,
+decision_events, paper_orders, paper_fills, paper_positions
+Journal journal_entries, journal_notes, trade_outcomes,
+strategy_statistics
+Ops notifications, notification_deliveries, audit_logs, outbox_events,
+job_runs, system_events
+19.1 Database design rules
+ Use UUID/ULID-style primary keys where globally unique IDs are helpful; use surrogate integer IDs only
+where performance/partitioning justifies it.
+ Store UTC timestamps; convert to user timezone at presentation boundaries.
+ Use `numeric`/decimal-safe types for prices and monetary values where precision matters; never use binary
+float for stored money.
+ Partition high-volume candle/event tables by time and possibly provider/instrument when scale requires it.
+ Use unique constraints to prevent duplicate provider candle ingestion.
+ Use append-only event tables for setup/decision state changes and audits.
+ Vector indexes are created only after representative corpus size and recall/latency benchmarking.
+24
+
+===== PAGE 25 =====
+20. Security, Privacy and Operational Safety
+20.1 Network topology
+Internet -> HTTPS/Nginx -> FastAPI only
+Private network -> PostgreSQL, Redis, Ollama, MinIO
+Outbound allowlist -> approved market/news providers
+No public Ollama :11434
+No public PostgreSQL :5432
+No public Redis :6379
+20.2 Security controls
+Area Control
+Secrets Environment/secret manager; never Git; rotate provider and
+Telegram tokens.
+Authentication Short-lived access tokens + refresh rotation; revoke
+device/session.
+Authorization Role-based access to admin, risk-policy and strategy changes.
+Uploads File type/size validation, malware scan where practical, object-
+storage isolation.
+Prompt injection Treat course/public text as untrusted data, not executable
+instructions; tool permissions enforced in code.
+LLM isolation Model server not exposed to mobile/Telegram; only AI Gateway
+can call it.
+Audit Immutable logs for strategy/risk/model changes and decisions.
+Provider keys Read-only market keys whenever possible; no withdrawal
+permissions.
+Data deletion/export User-controlled export/delete workflow for personal app data.
+Backups Encrypted off-server backups and tested restores.
+20.3 Trading safety controls
+ Fail closed on stale/missing market data.
+ Fail closed when Risk Engine cannot compute a valid quantity or instrument metadata is missing.
+ Economic-event blackout for Forex if the active policy requires it.
+ No live execution in V1; future execution service requires separate credentials, approvals and kill switch.
+ Global scanner kill switch and per-asset kill switch.
+21. Logging, Monitoring and Observability
+Component Metrics
+API request rate, latency, 4xx/5xx, WebSocket connections.
+Market data feed lag, missing candles, provider errors, stale quotes.
+Workers queue depth, task duration, retries, dead letters.
+Ollama/model latency, tokens, VRAM/GPU utilization, OOM, queue time.
+RAG retrieval latency, hit rate, expected-source recall, citation
+coverage.
+Decision model prediction distribution, calibration drift, feature drift,
+abstention rate.
+Trading pipeline setups/hour, WAIT rate, invalidations, alert delivery latency.
+25
+
+===== PAGE 26 =====
+Component Metrics
+Database connections, slow queries, storage, replication/backup health.
+Notifications send success/failure/retry and user acknowledgement.
+21.1 Structured log fields
+timestamp, level, service, request_id, user_id, agent_run_id, setup_id, decision_id, instrument_id, strategy_version_id,
+model_version_id, message, error_code
+22. Testing and Evaluation Strategy
+Test layer Coverage
+Unit Indicators, swing/BOS/MSB logic, risk math, label engine,
+serializers.
+Golden strategy fixtures Known historical/chart examples with expected condition
+results.
+Integration Postgres/Redis/Ollama/provider adapters/worker interactions.
+Contract API schemas, provider-normalization contracts, event schemas.
+RAG evaluation Known questions -> expected authoritative source chunks and
+answer facts.
+Vision evaluation Labeled charts -> symbol/timeframe/structure/setup extraction
+metrics.
+Decision ML Time-split metrics, calibration, confusion matrix, expectancy
+conditioned on decisions.
+Backtest regression Strategy version on frozen dataset must reproduce expected
+metrics within tolerance.
+Paper E2E Feed -> setup -> decision -> alert -> journal/outcome.
+Security Authz, prompt injection/tool boundaries, upload validation,
+secret scanning.
+Load Concurrent Telegram/mobile queries plus scanner jobs plus AI
+queue.
+Disaster recovery Database/object restore and model artifact recovery.
+22.1 Minimum release gates
+ Strategy deterministic tests pass.
+ Historical backtest completed on agreed train/validation/test periods.
+ No material look-ahead leakage found.
+ Decision-model calibration acceptable or confidence downgraded to qualitative bands.
+ RAG benchmark retrieves the correct trusted source at the target recall level.
+ Vision benchmark meets minimum extraction accuracy or vision remains advisory only.
+ Paper trading runs continuously for the agreed period without critical pipeline failures.
+ Alert messages reproduce computed numbers exactly.
+ Backup/restore drill succeeds.
+ Security review verifies Ollama/DB/Redis are not internet-exposed.
+26
+
+===== PAGE 27 =====
+23. CI/CD and Deployment
+23.1 Pull-request pipeline
+uv sync --locked
+ruff check .
+ruff format --check .
+mypy packages apps
+pytest --cov
+alembic migration sanity check
+strategy golden tests
+contract tests
+Docker build
+secret scan
+23.2 Deployment environments
+Environment Purpose Data
+Local Developer workflow Synthetic/test data; local Ollama.
+Staging Integration and release candidate Non-production credentials;
+representative datasets.
+Production Live market monitoring, user alerts Production data, private model server,
+backups.
+23.3 Production deployment evolution
+32. Stage A: one GPU-capable Ubuntu server for API/workers/Ollama plus managed or local Postgres if low
+usage.
+33. Stage B: split database and GPU inference from API/workers.
+34. Stage C: multiple inference replicas behind AI Gateway; dedicated worker pools; read replicas/partition
+tuning if needed.
+24. Complete Build Roadmap - Phase by Phase
+Phase 0 - Resource Audit and Strategy Specification
+Work: Create a source inventory, authority hierarchy, concept glossary, conflicts list, Forex gaps list, and
+measurable-definition backlog. Extract the current crypto framework and map every rule to source references.
+Curate screenshot pages and mark irrelevant/duplicate items. Decide the first supported crypto symbols and first
+FX pairs.
+Deliverable: Approved Strategy Specification v1; data-source matrix; glossary; risk-policy conflicts logged;
+labeled-example plan.
+Acceptance gate: No coding of trade decisions until every mandatory entry/exit term has either a deterministic
+definition or an explicit “AI-only/advisory” status.
+Phase 1 - Repository, uv and Developer Tooling
+Work: Create uv workspace, package structure, lint/type/test rules, Docker Compose for Postgres/Redis/MinIO,
+config system, structured logging, pre-commit/CI basics.
+Deliverable: Reproducible `uv sync`; API health endpoint; containers start; CI green.
+27
+
+===== PAGE 28 =====
+Acceptance gate: Fresh machine can clone, run `uv sync`, start dependencies, and pass tests without
+undocumented steps.
+Phase 2 - Database and Identity Foundation
+Work: Implement SQLAlchemy models, Alembic, users, sessions, devices, Telegram link, roles, audit, outbox,
+object-storage metadata.
+Deliverable: Initial migrations and auth APIs.
+Acceptance gate: Register/login/refresh/logout and audit events tested; migrations reversible where feasible.
+Phase 3 - Private AI Gateway and Ollama
+Work: Install Ollama, pull baseline main model and embedding model, implement AIClient abstraction,
+structured JSON output, timeouts/retries, model request logging, prompt registry.
+Deliverable: Private inference through backend only.
+Acceptance gate: No mobile/Telegram direct access to Ollama; structured response validation and failure
+handling tested.
+Phase 4 - Knowledge/RAG Pipeline
+Work: Build uploads, extraction, curation state, chunking, embeddings, pgvector search, authority tiers, source
+citations, evaluation set.
+Deliverable: Ask questions about approved course/strategy and return evidence.
+Acceptance gate: Known QA benchmark retrieves expected authoritative source; irrelevant source cannot
+override Tier-1 rule.
+Phase 5 - Market Data Core
+Work: Implement provider interfaces, instrument metadata, crypto OHLCV feed/history, FX provider integration,
+normalization, quality checks, calendar/timezone service.
+Deliverable: Normalized candles/quotes and health dashboards.
+Acceptance gate: Same strategy-facing contracts regardless of provider; gaps/stale data fail closed.
+Phase 6 - Deterministic Feature Engine
+Work: Implement indicators and market-structure primitives: ATR/range, swing logic, BOS/MSB, volume/range
+ratios, support/resistance helpers, session features. Add approved Wyckoff/liquidity/FVG definitions gradually
+with golden tests.
+Deliverable: Versioned feature definitions and tests.
+Acceptance gate: Every live feature has unit tests and timestamp-safe semantics.
+Phase 7 - Strategy Engine v1
+Work: Encode source-derived LONG/SHORT/WAIT gates, safer/aggressive entry paths, structural
+stop/invalidation, staged targets, market-state and session rules. Create strategy-version registry.
+Deliverable: StrategyAssessment from historical or live MarketContext.
+Acceptance gate: Golden examples produce expected condition matrix; mandatory-rule failure always blocks
+READY state.
+28
+
+===== PAGE 29 =====
+Phase 8 - Risk Engine
+Work: Implement policy versioning, quantity math for crypto and FX, R:R, exposure, daily/weekly limits,
+correlation limits, event blackouts and veto reasons.
+Deliverable: RiskAssessment object.
+Acceptance gate: Risk calculations match hand-verified fixtures; invalid metadata cannot produce a quantity.
+Phase 9 - Historical Data and Backtesting
+Work: Acquire licensed/API historical data; build replay engine, fees/spread/slippage, state machine, metrics,
+dataset versioning and reproducibility.
+Deliverable: Backtest reports per strategy version/asset/timeframe.
+Acceptance gate: No look-ahead in audited examples; same strategy core used live and historically.
+Phase 10 - Training Dataset Builder
+Work: Convert historical states into feature rows and policy-defined outcomes. Create train/validation/test time
+splits, feature lineage and data-quality reports.
+Deliverable: Versioned decision dataset.
+Acceptance gate: Every row traces back to raw source timestamps, strategy version and label policy.
+Phase 11 - Decision Model v1
+Work: Train LightGBM/XGBoost baselines, tune only on validation, calibrate scores, store model artifact/metrics,
+add feature importance and abstention thresholds.
+Deliverable: DecisionModel service.
+Acceptance gate: Out-of-sample metrics and calibration documented; model cannot bypass hard/risk gates.
+Phase 12 - Decision Agent and Explanation
+Work: Combine rule gate, ML score, risk veto, historical similarity and LLM evidence/explanation into final
+action contract.
+Deliverable: Final Decision record with ENTER/WAIT/HOLD/EXIT states.
+Acceptance gate: All numeric fields originate from deterministic/statistical services; explanation references
+actual evidence.
+Phase 13 - Vision/Screenshot Analysis
+Work: Extract original screenshots, label benchmark, implement image upload/VLM extraction, cross-check
+against real data, compare main model vs dedicated VLM.
+Deliverable: Screenshot analysis workflow.
+Acceptance gate: Vision never directly authorizes a trade; low-confidence symbol/timeframe forces clarification
+or market verification.
+Phase 14 - Market Scanner and Background Jobs
+Work: Implement scheduled/WebSocket scans, cheap prefilters before LLM calls, Redis locks, Celery queues,
+idempotent jobs, retry/dead-letter policy.
+Deliverable: 24/7 candidate scanner.
+Acceptance gate: Duplicate candles/jobs do not duplicate setups; scanner recovers after restart.
+29
+
+===== PAGE 30 =====
+Phase 15 - Telegram Bot
+Work: Webhook integration, commands, questions, screenshot upload, alerts, interactive feedback, message
+tracking.
+Deliverable: Private Telegram trading copilot.
+Acceptance gate: Setup alerts are reproducible from stored Decision record; webhook secret validated.
+Phase 16 - Paper Trading
+Work: Simulated order/fill engine, active positions, staged exits, stop/invalidation, P&L, auto-journal.
+Deliverable: Live paper mode.
+Acceptance gate: Runs for agreed soak period; fills/cost assumptions documented; all outcomes journaled.
+Phase 17 - Mobile App
+Work: Expo app with auth, dashboard, setups, setup details, chat, screenshot analysis, strategies, journal,
+analytics, notifications/settings.
+Deliverable: iOS/Android app connected to production API.
+Acceptance gate: Critical flows work on physical devices; background push and deep links tested.
+Phase 18 - Analytics and Continuous Learning
+Work: Strategy statistics, similar historical setups, decision calibration monitoring, human override analysis,
+drift detection, dataset review queue.
+Deliverable: Analytics Agent and model monitoring.
+Acceptance gate: Statistics computed from DB, never invented by LLM; model retraining requires explicit
+evaluation/approval.
+Phase 19 - Security/Observability/Production Hardening
+Work: Nginx/TLS, firewall, secret management, backups, restore drill, Prometheus/Grafana, error tracking, rate
+limits, provider outage policies, kill switches.
+Deliverable: Production readiness report.
+Acceptance gate: External scan confirms internal services are private; restore and kill-switch tests succeed.
+Phase 20 - Live Recommendation Release
+Work: Enable live alerts only after strategy/backtest/model/RAG/vision/paper gates pass. Start with limited
+instruments and conservative notification scope.
+Deliverable: Production decision alerts for approved markets.
+Acceptance gate: Release checklist signed off; automated broker execution still disabled.
+25. Suggested Implementation Order for a Solo Developer
+Do not interpret the following as fixed calendar promises. It is a sequencing guide. A solo developer should
+prefer thin vertical slices and keep the system runnable after each slice.
+Build block Indicative focus
+Block 1 Phases 0-3: specification, uv foundation, DB/auth, Ollama
+gateway.
+30
+
+===== PAGE 31 =====
+Build block Indicative focus
+Block 2 Phases 4-8: RAG, market data, features, strategy, risk.
+Block 3 Phases 9-12: backtesting, dataset, ML decision model,
+Decision Agent.
+Block 4 Phases 13-16: vision, scanner, Telegram, paper trading.
+Block 5 Phases 17-20: mobile, analytics, hardening, controlled
+live recommendation release.
+For a single developer, a production-quality version is better planned in months rather than weeks. The largest
+uncertainty is not writing FastAPI endpoints; it is formalizing strategy definitions, acquiring/licensing reliable
+Crypto + Forex data, producing labeled examples, and validating the Decision Agent out-of-sample.
+26. Remaining Resources Needed
+Resource Priority Why
+Original screenshot ZIP High Needed for a clean chart dataset and
+higher-resolution vision evaluation.
+Forex-specific strategy/course examples High Current material is mainly crypto-
+oriented; avoids inventing Forex
+interpretation.
+Course videos/transcripts High Clarifies verbal definitions such as
+significant volume, clean retest and edge
+cases.
+More past trades High Need wins, losses, valid-but-losing setups,
+invalid setups and WAIT examples.
+Personal annotations High “This is BOS / this is not BOS” examples
+are extremely valuable labels.
+Historical crypto data High OHLCV plus derivatives/order-flow
+context where available/licensed.
+Historical Forex data High OHLC/bid-ask/tick volume and
+calendar/session context.
+Economic/news sources Medium/High Needed for macro/event-risk context and
+Forex gating.
+Instrument metadata High Fees, tick/lot size, contract/pip values and
+market hours.
+Trading journals/spreadsheets Medium/High Useful for outcome labels, mistakes and
+personal feedback loop.
+26.1 Internet data policy
+Use official/licensed APIs or downloadable datasets for historical market data whenever possible. Internet/public
+education is supplementary knowledge, not an equal-authority replacement for the approved course/strategy.
+Store source/licensing metadata and keep scraped content out of the authoritative strategy tier unless it is
+explicitly reviewed and approved.
+27. Decisions That Must Be Resolved Before Production
+Decision Question
+Risk policy Which exact live/paper risk limits supersede the various
+personal/course examples?
+Volume threshold What measurable rule defines significant/low/high volume per
+31
+
+===== PAGE 32 =====
+Decision Question
+asset class?
+BOS/MSB semantics Close vs wick; pivot confirmation; minimum displacement.
+Wyckoff automation Which phases/events are deterministic enough for code versus
+advisory AI labels?
+Forex adaptation How is “volume harmony” defined using decentralized FX data?
+News/event gate Which event severities cause WAIT and for how long
+before/after?
+Weekend crypto policy Does the personal “avoid weekends” rule remain a hard rule or
+a configurable strategy policy?
+Futures scope When and whether perpetual/futures recommendations are
+allowed; leverage cap policy.
+Target policy Fixed structure targets versus opposite-MSB exit versus staged
+TP combinations.
+Public research authority Which external sources, if any, are promoted above
+supplementary tier?
+28. Core Data Contracts - Reference Examples
+28.1 Final Decision
+{
+"decision_id": "...",
+"instrument": "BTCUSDT",
+"asset_class": "CRYPTO",
+"timeframe": "1h",
+"action": "WAIT_FOR_CONFIRMATION",
+"direction_bias": "LONG",
+"strategy_version": "wyckoff-hdm-1.0.0",
+"passed_conditions": ["htf_bullish", "bullish_bos", "volume_harmony"],
+"missing_conditions": ["low_volume_retest"],
+"risk_status": "NOT_EVALUATED",
+"model_score": 0.71,
+"calibrated_probability": null,
+"confidence_band": "MEDIUM",
+"evidence_refs": ["course:...", "market_snapshot:..."],
+"generated_at": "UTC timestamp"
+}
+28.2 Ready-for-review decision
+{
+"action": "ENTER_LONG",
+"entry_zone": ["...", "..."],
+"stop_loss": "...",
+"targets": ["...", "...", "..."],
+"rr_to_tp1": "...",
+"position_size": "...",
+"risk_amount": "...",
+"risk_policy_id": "...",
+"hard_rule_gate": "PASS",
+32
+
+===== PAGE 33 =====
+"risk_gate": "PASS",
+"decision_model": {"version": "...", "score": "..."},
+"explanation": "..."
+}
+29. Failure Handling and Degraded Modes
+Failure Required behavior
+Ollama unavailable Market scanner and deterministic engines continue; no LLM
+explanation. Decision alerts may be suppressed or clearly
+marked degraded depending on policy.
+Embedding model unavailable Existing RAG search may continue if query embeddings cannot
+be generated only via fallback if approved; otherwise
+knowledge queries fail cleanly.
+Market provider stale Fail closed for affected instruments; no new actionable decision.
+Crypto derivatives provider missing Decision model must know feature missingness; strategies
+requiring those features cannot pass hard gate.
+Economic calendar unavailable Forex policy may force WAIT if event-risk cannot be verified.
+Redis unavailable API may run read-only; background scanning/notifications stop
+until recovery.
+Database unavailable Fail closed; never generate unpersisted actionable decisions.
+Telegram failure Retry with backoff; in-app decision remains; delivery status
+recorded.
+Vision low confidence Ask for a clearer screenshot or use actual symbol/timeframe
+selected by user; never guess silently.
+Model drift Downgrade/disable ML contribution and revert to rule-only
+recommendation mode after policy threshold.
+30. Model Lifecycle and Retraining Governance
+ Every decision model has immutable model ID, code commit, dataset version, feature schema version,
+training period and metrics.
+ Retraining is never triggered solely because recent P&L is poor; first inspect data drift, calibration and
+sample size.
+ Challenger models run offline and in shadow mode before replacing champion.
+ Promote only when holdout/walk-forward metrics and risk metrics improve without unacceptable
+calibration/regime degradation.
+ Keep rollback artifacts for previous production model.
+ Fine-tuning the LLM/LoRA is a later phase after a substantial reviewed decision/chat dataset exists; RAG +
+tools + ML remains the baseline.
+31. Definition of Done for the First Real Release
+ [ ] Private backend uses Python + FastAPI managed with uv and reproducible lockfile.
+ [ ] PostgreSQL/pgvector, Redis, object storage and Ollama run privately.
+ [ ] Approved course resources are curated, tiered, searchable and source-citable.
+ [ ] Crypto and Forex market adapters normalize into one MarketContext interface.
+ [ ] Deterministic strategy/risk logic has golden tests and versioning.
+33
+
+===== PAGE 34 =====
+ [ ] Historical replay demonstrates no known look-ahead leakage.
+ [ ] Decision ML is trained on time-split data, evaluated out-of-sample and calibrated or explicitly
+uncalibrated.
+ [ ] Decision Agent can issue WAIT/NO_SETUP as well as actionable states.
+ [ ] LLM explanations use computed values and course evidence rather than inventing numbers.
+ [ ] Screenshot analysis is verified against actual market data.
+ [ ] Telegram supports questions, screenshots and decision alerts.
+ [ ] Mobile app supports setup review, chat, journal and analytics.
+ [ ] Paper trading has run through the agreed soak period with reliable journaling.
+ [ ] Monitoring, backups, restore, kill switches and alert-delivery tracking are working.
+ [ ] No direct public access to Ollama, DB or Redis.
+ [ ] Live broker/exchange execution remains disabled unless a later separately reviewed project explicitly
+enables it.
+Appendix A - Recommended First Supported Markets
+Start narrow enough to validate quality. The current source material explicitly emphasizes BTC/USDT,
+ETH/USDT, BNB/USDT and SOL/USDT. These should therefore be the first crypto instruments. For Forex, select a
+small set only after the provider and Forex adaptation rules are finalized; do not claim the course specifies exact
+FX pairs if it does not.
+Appendix B - Recommended Initial Model Layout
+Ollama
+├── main multimodal model: Qwen3.5 27B-class
+└── embedding model: Qwen3 Embedding 4B-class
+Optional after benchmark:
+└── dedicated vision model: Qwen3-VL 30B-class
+Decision ML (not Ollama):
+├── LightGBM baseline
+└── XGBoost challenger
+Treat exact model versions as replaceable configuration. Benchmark the actual chosen quantization on your
+GPU, your course QA benchmark, and your chart benchmark before production lock.
+Appendix C - Source-Derived Rules to Preserve in the First Strategy
+Specification
+ Volume/price Effort-vs-Result harmony/divergence framework.
+ Cause-and-Effect and accumulation/distribution framing.
+ Balance vs imbalance and liquidity-seeking market context.
+ Weekly/Monthly -> Daily/4H -> 1H/30m multi-timeframe hierarchy.
+ Spring, UTAD, LPS and Wyckoff phase interpretation where definitions are approved.
+ Safer entry: BOS close with significant volume -> retest -> low retest volume -> structured entry.
+ Aggressive entry: confirmed BOS + volume -> first confirmation candle.
+34
+
+===== PAGE 35 =====
+ Structure-based stop and explicit invalidation.
+ Exit on opposite structural evidence/climax as defined by approved version.
+ LONG/SHORT/WAIT signal logic and five-question mandatory checklist.
+ Crypto context inputs: order books, CVD, OI, funding, liquidations, spot premium/discount,
+ETF/margin/macro/news where available.
+ Journal every trade and preserve mistakes/lessons as structured data.
+Appendix D - Final Principle
+The project should not be built as “an LLM that looks at a chart and says buy or sell.” It should be built as a
+private evidence system: trusted strategy knowledge + normalized market data + deterministic feature/rule
+engines + risk veto + historical backtesting + a trained decision model + an LLM that explains and interacts. That
+architecture is slower to build than a demo, but it is testable, auditable and capable of improving over time
+without losing the original strategy discipline.
+35

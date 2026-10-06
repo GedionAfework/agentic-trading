@@ -1,0 +1,435 @@
+
+
+===== PAGE 1 =====
+Private Self-Hosted AI Trading Copilot Platform
+Private Self-Hosted AI Trading Copilot
+Platform
+System Architecture Design
+Logical, runtime, deployment, trust-boundary, scaling and evolution architecture
+Document Version 2.0
+Status Implementation-ready baseline
+Prepared For Private trading research and decision-support
+platform
+Architecture Self-hosted LLM/VLM, deterministic trading engine,
+private RAG
+Safety Boundary No autonomous live-money execution in baseline
+release
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 2 =====
+Private Self-Hosted AI Trading Copilot Platform
+Document Navigation
+This document uses numbered headings, requirement identifiers, interface identifiers, and cross-document
+references. In Microsoft Word, a generated table of contents can be inserted or refreshed from References >
+Table of Contents. The PDF is organized so the heading hierarchy remains visually clear even without a dynamic
+TOC field.
+1. Architecture Drivers
+Driver Architectural Consequence
+Private AI Self-hosted LLM/VLM/embeddings; private inference subnet; no
+mandatory public model API.
+Trading correctness Deterministic feature/strategy/risk engines are authoritative;
+LLM acts as bounded copilot.
+Continuous monitoring Event/scheduler driven scanner with lightweight prefilter;
+expensive AI invoked only for relevant candidates/questions.
+Explainability Persist rule evidence, model/prompt versions, citations and
+signal transition history.
+Low initial user count Modular monolith or small service set acceptable initially;
+boundaries designed for later split.
+Reliability Durable database, outbox, retry queues, health gates and stale-
+data fail-closed behavior.
+Future execution Execution deliberately absent from baseline and separated as a
+future bounded context.
+2. Context Architecture
+Figure 1 - Context / logical architecture
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 3 =====
+Private Self-Hosted AI Trading Copilot Platform
+2.1 External Systems
+External System Purpose Trust Level Data Exchanged
+Telegram User questions, screenshots, External/untrusted transport Telegram IDs, messages,
+alerts images, alert text.
+Push Provider Mobile push notification External Opaque device token, concise
+transport notification payload.
+Market Data Provider OHLCV/live prices/instrument External data source Read-only market data and
+metadata provider credentials.
+Mobile OS Secure token storage, User device Auth tokens and app data.
+notifications
+Backup Target Encrypted off-host backup Controlled external/private Encrypted DB/object backup
+artifacts.
+3. Logical Layers
+Layer Components Boundary
+Presentation Mobile App, Telegram Bot, Admin/health Never directly accesses
+UI DB/inference/provider secrets.
+Application/API Auth, REST/WebSocket, request Owns user/session boundaries and DTOs.
+validation, orchestration entrypoints
+Agent/Reasoning Orchestrator, Knowledge, Vision, Strategy Probabilistic; constrained by
+explanation, Signal narrative, Journal tools/schemas/policies.
+analysis
+Trading Domain Market normalization, features, strategy Deterministic authority.
+evaluator, risk engine, setup/signal state
+machine, paper trading
+Data/Integration PostgreSQL, pgvector, Redis, object Persistence and external I/O.
+storage, provider adapters,
+Telegram/push adapters
+Infrastructure Reverse proxy, containers, GPU runtime, Operational foundation.
+monitoring, backups, firewall
+4. Runtime Architecture
+Figure 2 - Runtime agent collaboration
+The orchestrator does not mean eight separate models. Agents are logical roles with separate policies and tool
+sets. One text model and one VLM can serve multiple agents; some deployments may use a single multimodal
+model. This design reduces GPU cost while retaining role separation at the application layer.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 4 =====
+Private Self-Hosted AI Trading Copilot Platform
+4.1 Request Routing Examples
+User/System Event Route
+"What does my strategy say about a valid retest?" API -> Orchestrator -> Knowledge Agent -> private vector
+retrieval -> LLM -> citations -> response.
+Screenshot + "should I consider this setup?" Upload -> Vision -> Market verification -> Knowledge -> Strategy
+evaluator -> Risk -> bounded explanation.
+New 15m candle close Market stream -> candle finalization -> feature engine ->
+scanner -> strategy/risk -> signal -> outbox -> notifications.
+"Which strategy works best on BTC 1H?" Orchestrator -> Journal/Analytics -> SQL aggregate service ->
+LLM narrative over computed metrics.
+5. Trust Boundaries and Data Classification
+Boundary Inside Outside Controls
+TB-1 Internet Edge Reverse proxy Mobile/Telegram/web clients TLS, rate limit, max body,
+WAF-like rules, auth.
+TB-2 Application Network Backend/workers Public Internet Default-deny inbound; egress
+allowlist where practical.
+TB-3 Inference Network LLM/VLM/embedding servers Public network and clients Private IP only, service auth,
+no direct exposure.
+TB-4 Data Network PostgreSQL/Redis/object Public network Private ports, credentials,
+storage encryption, backup controls.
+TB-5 Provider Egress Connector services Market/Telegram/push Scoped credentials, TLS, quota
+providers and SSRF controls.
+Classification Examples Handling
+Restricted Credentials, refresh tokens, API keys, Never in prompts/logs; secret
+private keys manager/environment; strict access.
+Confidential Trading strategies, courses, screenshots, Private storage, encrypted backups,
+journal RBAC.
+Internal Agent traces, metrics, strategy evaluation Authenticated admin/owner only.
+details
+Public-like Market prices from public exchanges May be cached; source attribution still
+retained.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 5 =====
+Private Self-Hosted AI Trading Copilot Platform
+6. Deployment Architecture
+Figure 3 - Physical deployment topology
+6.1 Baseline Single-Server Production
+ One Linux GPU server runs reverse proxy, API, workers, LLM/VLM inference, Redis and optionally
+PostgreSQL for minimal cost.
+ Only 443 (and optionally 22 restricted to VPN/admin IP) is exposed publicly.
+ Inference, PostgreSQL and Redis bind private/loopback interfaces.
+ Nightly encrypted backups copy database/object metadata to separate physical/provider storage.
+ Systemd or Docker restart policies recover failed containers.
+6.2 Recommended Split Production
+Node Workloads Reason
+Edge/App Node Nginx, API, Telegram webhook, Small CPU host; isolates public traffic.
+notification worker
+GPU Node vLLM text model, VLM, GPU-optimized, private network only.
+embedding/reranker
+Data Node PostgreSQL, Redis, object store I/O reliability and backup isolation.
+Optional Worker Node Backtests, ingestion, scans Prevents heavy jobs from affecting
+interactive API.
+7. Availability and Failure Domains
+Failure Domain Impact Containment
+GPU inference AI questions/explanations unavailable Deterministic market ingestion and data
+retention continue; queued AI work
+waits.
+Market provider Affected symbols not fresh Health gate blocks new signals; optional
+failover/backfill.
+Telegram Telegram alerts delayed Signal persists; mobile/push can still
+work; retries queued.
+PostgreSQL Authoritative state unavailable Writes and signal transitions stop; fail
+closed.
+Redis Queue/cache degradation API reads may work; jobs pause/recover;
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 6 =====
+Private Self-Hosted AI Trading Copilot Platform
+Failure Domain Impact Containment
+avoid Redis as sole authoritative storage.
+Object storage New files/screenshots fail Market scanning independent;
+ingestion/vision paused.
+8. Scalability Model
+Dimension Scale Technique Notes
+Symbols/timeframes Partition scan tasks; cache features; Avoid LLM per tick.
+evaluate only on relevant candle close.
+Interactive AI GPU request batching, continuous Interactive queue higher priority than
+batching, token caps, separate priority bulk ingestion.
+queue.
+Embeddings Batch embedding jobs and deduplicate by Re-embed only when model/version
+content hash. changes.
+Candles Partition by time and optionally Use TimescaleDB optional.
+instrument; retention/compression.
+Backtests Dedicated worker pool; chunk by Pin engine/data versions.
+instrument/window.
+Notifications Queue by channel; provider-specific rate Dedupe logical event before delivery.
+limit.
+9. Security Architecture
+The most important architectural security decision is that the model never owns broad infrastructure
+permissions. Tools are implemented server-side and exposed as narrow functions. A prompt can request a tool,
+but authorization, validation and side effects are controlled by deterministic application code.
+Control Plane Mechanism
+Identity Local accounts, MFA, Telegram link challenges, scoped service
+identities.
+Authorization RBAC + explicit capability checks at API and tool invocation
+layers.
+Model Tooling Allowlisted tools with typed schemas; no arbitrary shell, SQL or
+URL fetch from model.
+Secrets Injected at runtime; per-provider read-only keys where
+possible; never sent to LLM.
+Network Private DB/inference ports; firewall; optional
+WireGuard/Tailscale admin plane.
+Audit Append-only event stream for auth, strategy publishing, configs,
+signal changes and admin actions.
+Supply Chain Pinned dependencies/images, vulnerability scanning, minimal
+containers.
+Backups Encrypted and periodically restore-tested.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 7 =====
+Private Self-Hosted AI Trading Copilot Platform
+10. Observability Architecture
+Signal Examples Alert Condition
+API request count, p95 latency, 4xx/5xx 5xx spike, auth anomalies.
+GPU utilization, VRAM, queue depth, OOM, queue saturation, model process
+tokens/sec down.
+Market last candle age, gap count, reconnects freshness SLA breached.
+Queues depth, retry count, oldest age, dead backlog age above threshold.
+letters
+Notifications delivery success/failure by channel failure rate spike.
+Database connections, locks, disk, WAL, capacity/backup breach.
+replication/backup age
+Business setups per strategy, blocked reasons, unexpected zero/excessive setup rate.
+duplicate suppression
+11. Data Flow Architecture
+11.1 Knowledge Flow
+Upload -> Quarantine -> Parse -> Normalize -> Chunk -> Embed -> QA -> Approve -> Retrieve -> Cite
+11.2 Market-to-Signal Flow
+Provider -> Normalize -> Quality/Freshness -> Candle Store -> Feature Engine -> Strategy Evaluator -> Risk Gate ->
+Setup/Signal State -> Outbox -> Notification
+11.3 Screenshot Flow
+Client/Telegram -> Image Store -> VLM Extraction -> Symbol/Timeframe Resolution -> Market Verification -> Strategy/Risk
+-> Explanation -> Persist
+12. Architecture Decision Records (ADRs)
+ADR Decision Status Rationale
+ADR-001 Self-host models Selected Privacy/control outweigh
+operational complexity; public
+APIs optional only in non-
+production experiments.
+ADR-002 PostgreSQL + pgvector Selected Simplifies transactional + vector
+storage for single-owner scale.
+ADR-003 Deterministic rule engine Selected Trading predicates and risk
+calculations must be
+reproducible/testable.
+ADR-004 Logical agents share models Selected Avoid 8 separate model
+deployments while preserving
+role/tool isolation.
+ADR-005 Outbox pattern Selected Provides reliable
+notification/event emission tied
+to DB transactions.
+ADR-006 No live execution baseline Selected Reduces financial/security risk
+and enables validation through
+paper trading.
+ADR-007 UTC persistence Selected Avoids DST/timezone ambiguity
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 8 =====
+Private Self-Hosted AI Trading Copilot Platform
+ADR Decision Status Rationale
+in market/backtest records.
+ADR-008 Object storage for raw files Selected Avoid database bloat; DB stores
+metadata and references.
+ADR-009 Modular monolith first Preferred Lower ops burden; boundaries
+retained for later service split.
+ADR-010 Model structured outputs Selected Schema validation reduces free-
+form agent errors and enables
+deterministic orchestration.
+13. Evolution Roadmap
+Stage Architecture Change
+MVP Single owner, mobile + Telegram, private RAG, screenshot
+analysis, manual queries.
+Scanner Release Live market ingestion, deterministic strategies, alerts, setup
+review.
+Validation Release Backtesting, paper trading, journal/analytics, model/strategy
+evaluation suite.
+Scale Release Split GPU/data/app nodes, HA PostgreSQL, provider failover,
+higher scan volume.
+Future Execution Research Separate execution bounded context, separate
+credentials/network, hard approval controls, broker sandbox
+first. Not part of this baseline.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 9 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix A - Component Interaction Matrix
+Component Primary Calls / Dependencies Communication Policy
+Mobile API Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Telegram API Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+API Orchestrator,Postgres,Redis Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Orchestrator Knowledge,Vision,Market,Strategy,Risk,Jo Synchronous for interactive reads;
+urnal,Inference asynchronous for long-running/bulk
+work.
+Knowledge Postgres,Inference Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Vision Inference,Market,Postgres Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Market Postgres,Redis Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Feature Market,Redis Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Strategy Feature,Postgres,Knowledge Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Risk Market,Postgres Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Signal Postgres,Notify Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Notify Telegram,Mobile,Postgres Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Journal Postgres,Inference Synchronous for interactive reads;
+asynchronous for long-running/bulk
+work.
+Postgres Infrastructure/data dependency.
+Redis Infrastructure/data dependency.
+Inference Infrastructure/data dependency.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 10 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix B - Network Port and Exposure Model
+Service Example Port Bind / Exposure Notes
+Reverse proxy 443 Public Only normal public entry;
+TLS termination.
+API 8000 Private/container network Proxy only.
+vLLM text 8001 Private GPU network Never public.
+VLM 8002 Private GPU network Never public.
+Embedding 8003 Private GPU network May share inference server.
+PostgreSQL 5432 Private data network No public security group.
+Redis 6379 Private data network Auth/TLS if cross-host.
+MinIO/S3 gateway 9000 Private or tightly restricted Signed access through
+backend.
+Prometheus 9090 Admin/private No sensitive labels.
+Grafana 3000 Admin/VPN SSO/local auth.
+SSH 22 Admin IP/VPN only Prefer key auth; disable
+password.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 11 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix C - Detailed Deployment Scenarios
+C.1 Developer Laptop/Workstation
+Docker Compose runs API, PostgreSQL, Redis, local object store and optional Ollama/llama.cpp. Market provider
+uses read-only credentials. Telegram webhook may use tunnel only for development. No production secrets
+reused.
+C.2 Single GPU VPS/Bare Metal
+Reverse proxy on host; all other containers private. GPU assigned only to inference containers. PostgreSQL
+volume on reliable SSD. Backup agent writes encrypted snapshots off-host. Suitable for one user/low scan
+volume.
+C.3 Split App + GPU + DB
+Public app node handles API/webhooks. GPU node only accepts inference calls from app/worker subnet. DB node
+accepts Postgres/Redis connections only from app/worker nodes. Enables independent scaling and stronger
+blast-radius isolation.
+C.4 High Availability Future
+Two API replicas behind load balancer; managed/replicated PostgreSQL; Redis HA; two GPU workers; queue
+broker; object storage redundancy. Signal state remains DB-authoritative to avoid split-brain.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 12 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix D - Threat Model (STRIDE-Oriented)
+Threat Class Scenario Primary Controls
+Spoofing Attacker impersonates owner in MFA, numeric Telegram linking, short
+Telegram/app sessions, revoke, signed TLS.
+Tampering Modify strategy/version/history Immutable versions, RBAC, audit log, DB
+constraints, backups.
+Repudiation User/service denies publishing strategy or Authenticated actor id, correlation id,
+changing config append-only audit.
+Information Disclosure Course/strategy/screenshots leak Private inference/data, encrypted
+backups, least privilege, redacted logs.
+Denial of Service Large files/prompts or GPU saturation Request/file/token limits, rate limits,
+queues, circuit breakers.
+Elevation of Privilege Prompt convinces agent to call admin Server-side capability checks; no broad
+tool tools; prompt content untrusted.
+Supply Chain Malicious dependency/container Pinned versions, scans, minimal images,
+controlled CI.
+Provider Manipulation Bad/stale market feed Source attribution, freshness/quality
+gates, optional secondary provider
+comparison.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 13 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix E - Performance Budget
+Path Target Budget Design Allocation
+Dashboard read p95 < 500 ms API 50-100ms, DB 100ms,
+serialization/network balance.
+Setup detail p95 < 700 ms Precomputed evaluations/risk; no
+model call required.
+RAG question first token target <5s Retrieval <500ms, queue <1s typical,
+model TTFT remainder.
+Screenshot analysis <30s typical Upload/preprocess 2s, VLM 5-15s,
+market/RAG 2s, reasoning 5-10s.
+Closed-candle alert <30s after final candle Ingest 2s, features/rules 3s, AI
+explanation optional 10s, notification
+5s.
+Health endpoint <1s Cached dependency checks; deep
+health separate.
+Backtest No interactive SLA Runs low-priority/dedicated workers to
+protect interactive workloads.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 14 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix F - Architecture Quality Attribute Scenarios
+Attribute Stimulus Response Measure
+Security Unlinked Telegram user Reject private operation, no 100% unauthorized requests
+requests strategy data leakage, audit event. denied.
+Reliability Market provider Mark degraded, suppress Zero signals from stale
+unavailable for 10 min signals, reconnect/backfill. interval.
+Recoverability Host lost after nightly Provision replacement, RTO <=4h baseline.
+backup restore DB/resources,
+redeploy containers.
+Maintainability Replace text model Register model profile, No client/API schema
+evaluate, switch config, change.
+rollback without API
+changes.
+Performance 20 simultaneous AI Queue/batch, maintain No OOM/data corruption.
+questions system availability, bounded
+latency.
+Auditability Question why alert was sent Resolve strategy version, Complete lineage for
+weeks later rules, candle evidence, risk retained data.
+and model/prompt.
+Privacy Public AI provider Production remains No external LLM
+unreachable functional because none is dependency.
+required.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 15 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix G - Future Live Execution Isolation (Not Baseline)
+If live order execution is ever added, it must be designed as a separate bounded context and deployment, not a
+tool casually added to the existing Signal Agent. The minimum architecture should include separate broker
+credentials, allowlisted instruments, max daily risk, max order size, explicit human approval mode, broker
+sandbox certification, reconciliation loop, kill switch, independent audit, and preferably a separate
+network/service identity. No current component should possess permissions that can place a live order.
+System Architecture Design | 2.0 - Detailed Engineering Specification | October 2026

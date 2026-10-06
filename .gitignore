@@ -1,0 +1,7 @@
+﻿# Ignore local course dumps and secrets; keep structure
+resources/incoming/**
+!resources/incoming/.gitkeep
+!resources/README.md
+.env
+.env.*
+!.env.example

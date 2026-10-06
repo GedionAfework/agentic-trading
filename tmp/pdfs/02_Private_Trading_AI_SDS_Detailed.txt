@@ -1,0 +1,619 @@
+
+
+===== PAGE 1 =====
+Private Self-Hosted AI Trading Copilot Platform
+Private Self-Hosted AI Trading Copilot
+Platform
+Software Design Specification (SDS)
+Detailed component, service, API, agent, workflow, security, testing and operational design
+Document Version 2.0
+Status Implementation-ready baseline
+Prepared For Private trading research and decision-support
+platform
+Architecture Self-hosted LLM/VLM, deterministic trading engine,
+private RAG
+Safety Boundary No autonomous live-money execution in baseline
+release
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 2 =====
+Private Self-Hosted AI Trading Copilot Platform
+Document Navigation
+This document uses numbered headings, requirement identifiers, interface identifiers, and cross-document
+references. In Microsoft Word, a generated table of contents can be inserted or refreshed from References >
+Table of Contents. The PDF is organized so the heading hierarchy remains visually clear even without a dynamic
+TOC field.
+1. Design Objectives and Principles
+ Deterministic-first trading logic: AI cannot directly override hard strategy/risk gates.
+ Private-by-default inference: LLM/VLM and embedding services reside on private network.
+ Evidence-preserving workflows: every material decision can be traced to inputs, rules and model/prompt
+versions.
+ Asynchronous where expensive: ingestion, embedding, screenshot analysis, backtests and scans use durable
+jobs.
+ Idempotent boundaries: webhooks, notifications and jobs use idempotency keys/outbox patterns.
+ Replaceable models/providers: model serving and market providers are abstracted behind stable interfaces.
+ No baseline live execution capability: a future execution service must be separately designed, permissioned
+and deployed.
+2. Proposed Technology Stack
+Layer Recommended Baseline Design Notes
+Mobile Expo / React Native / TypeScript SecureStore, push notifications, React
+Query or equivalent, chart/detail views.
+Backend API FastAPI / Python 3.12 Async endpoints, Pydantic schemas,
+JWT/session validation, OpenAPI.
+Workers Celery/RQ/Arq or equivalent Separate queues for ingestion, scans, AI,
+notifications, backtests.
+Database PostgreSQL 16 + pgvector Transactional core + embeddings;
+optional TimescaleDB if candle volume
+grows.
+Cache/Queue Redis Short-lived cache, distributed locks, rate
+limiting, queue broker if selected.
+Object Storage S3-compatible MinIO/R2/local object store Private documents and screenshots.
+LLM/VLM Serving vLLM or llama.cpp/Ollama for smaller OpenAI-compatible private endpoint;
+deployments model identity pinned.
+Observability Prometheus + Grafana + Metrics, logs, traces; GPU metrics via
+Loki/OpenTelemetry exporter.
+Reverse Proxy Nginx/Caddy/Traefik TLS, request size limits, headers, rate
+limiting.
+Deployment Docker Compose initially; Kubernetes Single GPU host + DB host or consolidated
+optional private server for MVP.
+3. Service Decomposition
+Component Responsibilities Primary Persistence
+API Gateway / App API REST/WebSocket interface for users, sessions, setups, queries
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 3 =====
+Private Self-Hosted AI Trading Copilot Platform
+Component Responsibilities Primary Persistence
+mobile/admin; validates auth, DTOs and rate
+limits.
+Identity Service Credential verification, MFA, sessions, users, sessions, telegram_accounts
+Telegram linking, RBAC.
+Knowledge Service Document lifecycle, parsing metadata, knowledge_documents, document_chunks
+chunk retrieval, citations.
+Embedding Service Creates/query embeddings using private embeddings
+model; isolated batching/cache.
+Agent Orchestrator Workflow state machine, agent/tool routing, agent_runs, agent_steps
+token/time budgets, correlation.
+Vision Service Image preprocessing, VLM invocation, screenshots, vision_analyses
+structured extraction.
+Market Data Service Adapters, candle normalization, backfill, providers, instruments, candles
+live stream, freshness/quality.
+Feature Engine Indicators, pivots/structure primitives, feature_snapshots or transient cache
+reusable derived features.
+Strategy Engine Versioned strategy/rule evaluation and strategies, versions, rules, evaluations
+evidence.
+Risk Engine R:R, invalidation, optional sizing, policy risk_assessments
+gates.
+Signal Service Setup lifecycle and publish policy. setups, signals, signal_events
+Notification Service Telegram/push delivery, templates, notifications, delivery_attempts
+deduplication, retry.
+Paper Trading Service Hypothetical entries/exits and outcomes. paper_accounts, paper_trades, trade_events
+Journal/Analytics Service Notes, tags, aggregates, performance journal_entries, analytics_snapshots
+cohorts.
+Scheduler/Worker Control Periodic scans, backfills, retention, backups jobs/dead-letter metadata
+and health tasks.
+Figure 1 - Agent workflow and responsibility separation
+4. Agent Design and Contracts
+Agent Inputs Outputs Allowed Tools Forbidden Failure Rule
+AG-01 Orchestrator Intent, user/session workflow enum, task May call approved No direct SQL; no 5-20s interactive
+context, optional list, final response internal tools/agents market order actions budget; hard max
+setup/screenshot ids configured
+AG-02 Knowledge query + filters + ranked evidence Vector search, Cannot change Return
+strategy version chunks + source refs + document metadata documents or strategies empty/insufficient
+answer notes evidence explicitly
+AG-03 Vision image id + user structured visual Object store, VLM, Cannot assert exact Low-confidence fields
+question + optional observations, optional market lookup unseen prices nullable
+expected symbol confidence, extracted
+labels
+AG-04 Market Data symbol/timeframe/ fresh normalized Market data service Cannot decide trade Fails closed on
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 4 =====
+Private Self-Hosted AI Trading Copilot Platform
+Agent Inputs Outputs Allowed Tools Forbidden Failure Rule
+window snapshot/features only direction stale/gapped data
+AG-05 Strategy strategy_version + rule evaluation Strategy definitions, Cannot bypass LLM explanation
+deterministic features + proposal/explanation Knowledge Agent deterministic evaluator secondary to evaluator
+evidence
+AG-06 Risk candidate setup + risk assessment + Risk calculator Cannot publish signal Hard rule failure blocks
+market snapshot blockers signal
+AG-07 Signal setup + rule/risk state transition + alert Signal state machine, Cannot place trades Idempotent by
+outcomes payload notification enqueue setup/version/policy
+key
+AG-08 Journal cohort/filter/question analytics narrative + Analytics queries Cannot rewrite source Warns on small
+metric references outcomes samples
+4.1 Agent Invocation Envelope
+{
+"run_id": "uuid",
+"agent_id": "AG-05",
+"actor": {"user_id":"uuid","role":"owner"},
+"context": {"strategy_version_id":"uuid","setup_id":"uuid|null"},
+"input": {...},
+"budgets": {"timeout_ms":15000,"max_output_tokens":1800},
+"policy_version": "agent-policy-2026-10",
+"prompt_version": "strategy-agent-v7",
+"model_profile": "reasoning-default"
+}
+4.2 Structured Output Validation
+Each AI agent returns a versioned JSON schema. Free-form text is generated only after structured fields validate.
+Invalid JSON, missing required evidence, unknown enum values or schema mismatch triggers one constrained
+repair attempt; repeated failure returns a controlled error and does not progress the trading state machine.
+5. Core Workflows and Sequence Design
+Workflow Sequence
+Automatic scan 1) candle close/event received; 2) normalize; 3) freshness/quality; 4)
+compute features; 5) prefilter eligible strategies; 6) deterministic
+rule evaluation; 7) optional knowledge/AI explanation; 8) risk gate;
+9) signal state transition; 10) outbox event; 11) Telegram/push
+delivery.
+Screenshot question 1) upload; 2) validate/store; 3) enqueue vision analysis; 4) VLM
+structured extraction; 5) resolve symbol/timeframe if possible; 6)
+fetch fresh market data; 7) retrieve strategy knowledge; 8) evaluate
+rules; 9) compose bounded explanation; 10) persist run/evidence.
+Document ingestion 1) upload/quarantine; 2) checksum/type scan; 3) extract; 4)
+normalize; 5) chunk; 6) embed; 7) retrieval QA; 8) owner approval;
+9) activate.
+Backtest 1) pin strategy version + dataset fingerprint; 2) load candles; 3)
+compute features incrementally; 4) evaluate setup rules without
+future leakage; 5) simulate resolution under explicit assumptions; 6)
+aggregate metrics; 7) persist run and artifacts.
+Paper trade 1) user marks paper-entry; 2) snapshot intended entry/stop/targets;
+3) monitor price; 4) deterministic close rules; 5) compute realized R;
+6) journal; 7) analytics update.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 5 =====
+Private Self-Hosted AI Trading Copilot Platform
+6. API Design
+Method Path Role Input Output Permission
+POST /v1/auth/login Public credentials + optional access token + refresh AUTH_LOGIN
+MFA challenge session
+POST /v1/auth/refresh Refresh refresh token/session new access token AUTH_REFRESH
+GET /v1/setups Owner filters: paginated setups SETUP_LIST
+state,symbol,strategy,d
+ate
+GET /v1/setups/{id} Owner id setup + conditions + SETUP_READ
+risk + signal history
+POST /v1/setups/{id}/review Owner action,note review record SETUP_REVIEW
+POST /v1/ai/query Owner message,context ids streamed answer + AI_QUERY
+citations
+POST /v1/screenshots Owner multipart image screenshot id + job id SCREENSHOT_UPLOAD
+GET /v1/screenshots/{id}/ Owner id analysis status/result SCREENSHOT_READ
+analysis
+POST /v1/knowledge/ Owner/Admin multipart file + document + ingestion DOC_UPLOAD
+documents metadata job
+POST /v1/knowledge/ Owner id approved doc DOC_APPROVE
+documents/{id}/
+approve
+POST /v1/strategies Owner draft definition strategy STRATEGY_CREATE
+POST /v1/strategies/{id}/ Owner rules/config draft version STRATEGY_VERSION
+versions
+POST /v1/strategy-versions/ Owner validation published immutable STRATEGY_PUBLISH
+{id}/publish acknowledgement version
+POST /v1/backtests Owner strategy_version,instru run id BACKTEST_CREATE
+ments,window
+GET /v1/backtests/{id} Owner id status,metrics,artifacts BACKTEST_READ
+GET /v1/analytics/ Owner cohort filters metrics + sample ANALYTICS_READ
+performance counts
+GET /v1/admin/health Admin none dependency health ADMIN_HEALTH
+POST /v1/admin/kill-switch Admin scanner_enabled,notific current flags ADMIN_KILL_SWITCH
+ations_enabled
+6.1 Standard Error Envelope
+{
+"error": {
+"code": "MARKET_DATA_STALE",
+"message": "Market data is not fresh enough for this operation.",
+"correlation_id": "uuid",
+"retryable": true,
+"details": {"symbol":"BTCUSDT","age_seconds":91}
+}
+}
+7. Event and Queue Design
+Event Payload Core Consumer
+market.candle.closed symbol,timeframe,open_time,close_time, scan-dispatch
+provider,quality
+knowledge.document.uploaded document_id,checksum ingestion
+knowledge.document.ingested document_id,chunk_count approval-notify
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 6 =====
+Private Self-Hosted AI Trading Copilot Platform
+Event Payload Core Consumer
+screenshot.uploaded screenshot_id,user_id vision
+setup.created setup_id,strategy_version_id risk/signal
+signal.publishable signal_id,channels notification
+notification.requested notification_id,channel,dedupe_key telegram/push
+paper_trade.opened trade_id paper-monitor
+paper_trade.closed trade_id,result_r analytics
+system.degraded component,reason ops-alert
+Use an outbox table for transactionally coupling state changes to asynchronous events. A dispatcher marks
+outbox rows published only after broker acceptance. Consumers maintain processed-message keys where side
+effects require exactly-once logical behavior.
+8. Strategy Evaluation Design
+Rules are stored as a constrained DSL/configuration, not arbitrary executable code. The evaluator resolves
+features by name, applies typed operators, and records tri-state TRUE/FALSE/UNKNOWN. Composite nodes
+support AND/OR/NOT with explicit unknown propagation.
+{
+"rule_id": "r-bos-confirm",
+"type": "comparison",
+"feature": "structure.bullish_bos",
+"operator": "eq",
+"value": true,
+"required": true,
+"weight": 20,
+"evidence": ["swing_high_id", "break_candle_id"]
+}
+Evaluation Stage Design
+Eligibility Match instrument, asset class, timeframe, session and enabled
+status.
+Feature resolution Compute or fetch feature values only from candles at/before
+evaluation timestamp.
+Predicate evaluation Typed operator returns TRUE/FALSE/UNKNOWN and reason.
+Composite evaluation Apply nested boolean logic and required/optional semantics.
+Score Calculate weighted score only after mandatory constraints;
+score cannot override a required failure.
+Evidence Persist feature ids/values/candle references and engine version.
+Candidate creation Create setup only if configured candidate threshold/state is
+reached.
+9. Risk Engine Design
+ Inputs are normalized decimal values, never binary floating point for persisted money/price fields.
+ R:R = absolute(target-entry) / absolute(entry-stop), adjusted for direction.
+ All price precision and tick-size validation use instrument metadata.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 7 =====
+Private Self-Hosted AI Trading Copilot Platform
+ Optional paper position size = account_risk_amount / stop_distance_value with contract-size conversion
+where applicable.
+ Freshness, minimum R:R, missing invalidation, spread/volatility and prohibited session/news flags are
+independent blockers.
+ Risk output contains hard_blockers[], warnings[], derived_values and engine_version.
+10. RAG and Knowledge Design
+Stage Implementation Detail
+Parsing Use format-specific extractors; preserve page/heading/source
+URL metadata where available.
+Normalization Remove repeated headers/footers, normalize whitespace, retain
+tables/code as meaningful blocks.
+Chunking Target 400-900 tokens with 10-20% overlap; strategy sections
+may use heading-aware chunks.
+Embedding Self-hosted embedding model; record model/hash and vector
+dimension.
+Retrieval Hybrid optional: pgvector cosine similarity + full-text ranking +
+metadata filters.
+Reranking Optional self-hosted reranker for top candidates.
+Prompting Retrieved text is delimited as untrusted evidence; instructions
+inside documents cannot override system policy.
+Citation Return document_id/chunk_id/page/section. Persist citations
+used per response.
+Evaluation Maintain golden Q&A set with expected source chunks and
+unsupported queries.
+11. Security Design
+Threat Control
+Credential theft Argon2id password hashing, MFA, short-lived access tokens,
+refresh rotation, session revoke.
+Public model exposure Inference bound to private interface/network; firewall;
+backend-only authentication.
+Prompt injection from documents Treat retrieved text as data; tool permissions hard-coded; never
+execute instructions from source content.
+Malicious file upload Allowlist types, size limits, parser isolation, malware scan
+where available, object key randomization.
+Telegram impersonation Explicit account linking, check Telegram user/chat id, revoke
+link capability.
+Secret leakage Environment/secret manager, log filters, no secrets in
+prompts/mobile bundle/database plaintext.
+SQL injection ORM/parameterized queries; no model-generated SQL against
+production DB.
+SSRF Market/document fetchers use allowlisted domains and egress
+controls.
+Excessive AI resource use Per-user budgets, request size limits, queue limits, token caps,
+GPU concurrency controls.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 8 =====
+Private Self-Hosted AI Trading Copilot Platform
+Threat Control
+Audit tampering Append-only permissions and periodic backup/export of audit
+records.
+12. Resilience and Failure Handling
+Failure Expected Behavior Retry / Recovery
+Market provider disconnect Mark connector degraded; block fresh Exponential backoff; optional failover;
+signals for affected source. backfill gaps before resume.
+LLM unavailable Knowledge/interactive AI reports Retry bounded; circuit breaker.
+temporary unavailability; deterministic
+ingestion/scanning may continue until
+explanation step if policy allows.
+VLM unavailable Screenshot remains queued/failed; no Retry then dead-letter.
+fabricated analysis.
+Redis unavailable API operations not requiring cache may Reconnect; queue-specific recovery plan.
+continue in degraded mode; workers
+pause safely.
+Database unavailable Fail closed for writes and trading-state Connection retry; operator alert; no in-
+changes. memory authoritative state.
+Telegram failure Persist notification as pending/failed; do Retry with backoff and Telegram error
+not roll back signal. classification.
+Worker crash Job message remains/reappears Idempotent consumer resumes.
+according to ack semantics.
+GPU OOM Reject/queue requests; lower Model worker restart policy; request
+concurrency; alert. caps.
+13. Testing Strategy
+Test Level Examples Exit Criteria
+Unit Indicator calculations, R:R, rule High coverage for deterministic core;
+operators, state transitions, dedupe keys. golden fixtures pass.
+Integration Provider adapter -> candles; DB -> No contract mismatch; retries
+outbox; RAG retrieval; Telegram mocked idempotent.
+delivery.
+AI Evaluation Golden questions, unsupported Thresholds documented and met; no
+questions, screenshot corpus, prompt- unsafe tool escalation.
+injection set.
+Backtest Regression Pinned strategy/data known expected Metrics within exact/tolerance bounds.
+metrics.
+Load Concurrent API, scan batches, embedding Meets NFR targets without data
+jobs, model queue. corruption.
+Security RBAC, auth brute-force controls, upload No critical/high unresolved.
+abuse, SSRF, secret scan, inference
+exposure.
+Disaster Recovery Restore DB/object metadata, redeploy RTO/RPO demonstrated.
+model, reconnect Telegram/provider.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 9 =====
+Private Self-Hosted AI Trading Copilot Platform
+14. Deployment and Configuration
+Figure 2 - Recommended deployment topology
+Recommended production layout separates public edge/API from private inference and data services. For a cost-
+sensitive single-owner deployment, services may share one GPU server, but firewall rules must still expose only
+reverse-proxy ports. PostgreSQL should not be Internet-exposed. A second encrypted backup destination is
+strongly recommended.
+14.1 Suggested Hardware Profiles
+Profile GPU System RAM Use
+Dev/Prototype 16-24 GB VRAM 32-64 GB 7B-14B quantized model, low
+concurrency, limited VLM.
+Balanced Production 24-48 GB VRAM 64-128 GB Stronger 14B-32B class models
+or separate text/VLM workers.
+High Quality 48-80+ GB VRAM or multi-GPU 128+ GB Larger reasoning/VLM
+models, higher
+context/concurrency.
+15. Coding and Operational Conventions
+ UTC timestamps in persistence; display timezone selected by user.
+ UUIDv7/UUID primary keys where available for sortable IDs.
+ Decimal/Numeric for prices and money; integers for counts; explicit enums constrained in DB/application.
+ Every request/job gets correlation_id; every agent workflow gets run_id.
+ Migrations and strategy engine versions are immutable artifacts in release pipeline.
+ Container images pinned by digest in production where practical.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 10 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix A - Service Internal Design: Identity Service
+ Endpoints: login, refresh, logout, MFA enroll/verify, session list/revoke, Telegram link challenge.
+ Argon2id parameters configurable; rate limit by account and source; lockout uses bounded backoff rather
+than easy denial-of-service permanent lock.
+ Refresh tokens opaque and hashed in DB. Rotation on refresh; reuse detection revokes token family.
+ Authorization returns capabilities to API layer but server performs final check on every protected operation.
+Internal Interfaces
+IdentityService exposes typed application interfaces; all calls carry correlation_id and authenticated actor/service
+context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 11 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Knowledge/Ingestion Service
+ State machine: QUARANTINED -> PARSING -> CHUNKING -> EMBEDDING -> DRAFT -> APPROVED or
+FAILED/RETIRED.
+ Parser workers run with CPU/time/memory limits. Original object never executed.
+ Chunk identity includes document version + ordinal + hash. Reingestion is idempotent by checksum/version.
+ Approval is a transactional operation that verifies required embeddings exist.
+Internal Interfaces
+Knowledge/IngestionService exposes typed application interfaces; all calls carry correlation_id and authenticated
+actor/service context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 12 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Market Data Service
+ Adapter interface: list_instruments(), fetch_candles(), subscribe_trades/candles(), get_server_time(), health().
+ Normalize timestamps to UTC and canonical intervals. Preserve provider timestamp and receive timestamp.
+ Candle writer uses idempotent upsert and correction flagging. Gap detector compares expected interval
+sequence.
+ Freshness service exposes per-symbol/timeframe last-finalized age and quality status.
+Internal Interfaces
+MarketSnapshot get_snapshot(instrument_id, timeframe, as_of)
+CandlePage get_candles(instrument_id, timeframe, start, end)
+FreshnessStatus get_freshness(instrument_id, timeframe)
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 13 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Feature Engine
+ Pure functions over ordered candle arrays where possible; no network or database writes in feature
+functions.
+ Feature registry declares required lookback, output type, version and dependencies.
+ Swing/BOS/liquidity concepts are strategy primitives with explicit algorithm/version, not LLM guesses.
+ Feature cache key includes instrument,timeframe,candle close,feature version/parameters.
+Internal Interfaces
+FeatureEngine exposes typed application interfaces; all calls carry correlation_id and authenticated actor/service context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 14 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Strategy Engine
+ Loads immutable strategy version and scope.
+ Evaluates rules in dependency order; missing feature yields UNKNOWN.
+ Produces EvaluationReport with eligibility, each rule outcome, score, blockers, evidence and engine version.
+ No natural-language model output can change outcome fields after deterministic evaluation.
+Internal Interfaces
+EvaluationReport evaluate(strategy_version_id, market_context, feature_context)
+EvaluationReport { eligible, result, score, blockers[], rules[], engine_version }
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 15 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Risk Engine
+ Consumes candidate setup + instrument metadata + current/final candle snapshot.
+ Validates direction-aware entry/stop/target relationship, tick precision and minimum R:R.
+ Returns hard blockers separately from warnings.
+ Optional sizing operates only on paper account and cannot call provider trade APIs.
+Internal Interfaces
+RiskAssessment assess(setup_candidate, instrument_meta, market_snapshot, risk_policy)
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 16 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Signal Service
+ Owns setup/signal state machine and transition validation.
+ Generates deterministic dedupe key from strategy version + instrument + timeframe + setup anchor + signal
+type.
+ Writes outbox event in same transaction as publishable state change.
+ Retractions/invalidations are new signal events, not destructive edits.
+Internal Interfaces
+SignalService exposes typed application interfaces; all calls carry correlation_id and authenticated actor/service context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 17 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Notification Service
+ Renders channel templates from already-authorized signal data; model not required for delivery.
+ Per-channel adapter maps retryable/permanent errors.
+ Stores provider message id and attempt history.
+ Quiet hours/filter policy checked before enqueue; critical health alerts can use separate policy.
+Internal Interfaces
+NotificationService exposes typed application interfaces; all calls carry correlation_id and authenticated actor/service
+context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 18 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Agent Orchestrator
+ Workflow definitions are code/config state machines, not free-form autonomous loops.
+ Each tool has schema, permission, timeout and result size cap.
+ Agent recursion/steps bounded; no agent may spawn arbitrary new agents.
+ Persistence captures run status, step sequence, model/prompt id and redacted I/O metadata.
+Internal Interfaces
+AgentOrchestrator exposes typed application interfaces; all calls carry correlation_id and authenticated actor/service
+context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 19 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Paper Trading Service
+ No live broker credential dependency.
+ Fill model configurable: close, next-open, touch, limit simulation; assumption stored.
+ Trade monitor handles stop/target, gaps and same-bar ambiguity with explicit policy.
+ All changes append paper_trade_events and derive current trade state.
+Internal Interfaces
+PaperTradingService exposes typed application interfaces; all calls carry correlation_id and authenticated actor/service
+context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 20 =====
+Private Self-Hosted AI Trading Copilot Platform
+Service Internal Design: Analytics Service
+ SQL/materialized views compute metrics; LLM only narrates computed results.
+ Cohort filters and source type (backtest/paper/manual) mandatory.
+ Metrics include sample size, win rate, loss rate, avg win/loss R, expectancy, profit factor where valid, max
+sequence/drawdown proxy.
+ Periodic snapshots record query definition/version for dashboard speed.
+Internal Interfaces
+AnalyticsService exposes typed application interfaces; all calls carry correlation_id and authenticated actor/service
+context.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 21 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix B - API Contract Examples
+POST /v1/ai/query
+{
+"message": "Does this BTC setup match Strategy A?",
+"context": {"setup_id":"...", "strategy_version_id":"..."},
+"response_mode": "stream"
+}
+200 stream/final:
+{
+"answer":"...",
+"confidence":"bounded",
+"citations":[{"document_id":"...","chunk_id":"...","page":42}],
+"verified_market_asof":"2026-10-05T10:15:00Z",
+"agent_run_id":"..."
+}
+POST /v1/screenshots
+Content-Type: multipart/form-data
+file=<image>; question="Analyze using my London-session strategy"
+202
+{"screenshot_id":"...","analysis_job_id":"...","status":"queued"}
+GET /v1/setups/{id}
+{
+"id":"...","state":"READY_FOR_REVIEW","symbol":"BTCUSDT","timeframe":"15m",
+"strategy":{"id":"...","version":7,"name":"..."},
+"market_asof":"...","direction":"long",
+"levels":{"entry_low":"...","entry_high":"...","stop":"...","targets":["..."]},
+"risk":{"rr":"2.84","hard_blockers":[],"warnings":[]},
+"rules":[{"code":"sweep","result":"true","evidence":{...}}],
+"history":[...]
+}
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 22 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix C - Detailed State Machines
+Entity State Allowed Next States Trigger
+Document QUARANTINED PARSING,FAILED Upload validated.
+Document PARSING CHUNKING,FAILED Extraction result.
+Document CHUNKING EMBEDDING,FAILED Chunks committed.
+Document EMBEDDING DRAFT,FAILED All embeddings complete.
+Document DRAFT APPROVED,RETIRED Owner review.
+Document APPROVED RETIRED Owner retires.
+Setup CANDIDATE WATCH,READY_FOR_REVIEW,I Rule/risk evaluation.
+NVALIDATED,EXPIRED
+Setup WATCH READY_FOR_REVIEW,INVALIDA New candle/confirmation.
+TED,EXPIRED
+Setup READY_FOR_REVIEW INVALIDATED,EXPIRED,CLOSED Market/user lifecycle.
+Setup INVALIDATED CLOSED Terminal bookkeeping.
+Setup EXPIRED CLOSED Terminal bookkeeping.
+PaperTrade OPEN CLOSED,CANCELLED Price event/user action.
+PaperTrade CLOSED - Terminal.
+Job QUEUED RUNNING,CANCELLED Worker lease.
+Job RUNNING SUCCEEDED,RETRYING,FAILED Execution outcome.
+Job RETRYING RUNNING,DEAD_LETTER Backoff/attempt limit.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 23 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix D - Prompt and Tool Security Policy
+ System prompts define role, scope, output schema, uncertainty policy and forbidden actions. They are
+immutable/versioned per deployment.
+ User text and retrieved documents are untrusted content. Statements such as "ignore previous instructions"
+inside them must not alter system policy.
+ No model receives raw database credentials, exchange secret keys, refresh tokens, Telegram bot token or
+infrastructure private keys.
+ Tool invocations are authorized outside the model. Even if model requests a forbidden tool/action, backend
+rejects it.
+ No arbitrary shell, Python execution, SQL execution, filesystem path access or arbitrary URL fetch tool is
+exposed to agents in production.
+ All external fetch tools use allowlisted providers and bounded parameters.
+ Agent output is parsed against JSON Schema/Pydantic before trading workflow progression.
+ Model-generated calculations are informational until recomputed/validated by deterministic code.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 24 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix E - Operational Runbooks
+Incident Runbook
+Market feed stale Confirm provider health -> inspect connector logs -> verify
+system clock -> pause scanner/ensure automatic gate active ->
+reconnect/backfill -> confirm continuous candles -> re-enable
+only after freshness healthy.
+GPU model unavailable Check process/VRAM -> stop bulk queue -> restart inference ->
+health prompt -> confirm model/hash -> resume interactive
+queue then bulk queue.
+Telegram delivery failures Inspect HTTP/status class -> verify bot token/permissions ->
+respect retry_after -> do not manually replay without dedupe
+key -> confirm pending queue drains.
+Database disk high Pause bulk/backtests -> inspect candle/audit growth -> verify
+backup -> extend disk/retention/partition maintenance -> never
+delete referenced setup evidence ad hoc.
+Suspected credential leak Disable/revoke affected credential -> rotate secret -> review
+audit/access logs -> redeploy consumers -> test -> document
+incident.
+Bad strategy version published Disable scanner for strategy or retire version -> do not mutate
+version -> create corrected version -> re-run fixtures/backtest ->
+publish new version -> optionally notify/retract affected signals.
+Software Design Specification | 2.0 - Detailed Engineering Specification | October 2026

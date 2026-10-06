@@ -1,0 +1,756 @@
+
+
+===== PAGE 1 =====
+Private Self-Hosted AI Trading Copilot Platform
+Private Self-Hosted AI Trading Copilot
+Platform
+Database Design Specification
+Detailed relational schema, data dictionary, constraints, indexing, partitioning, retention and audit design
+Document Version 2.0
+Status Implementation-ready baseline
+Prepared For Private trading research and decision-support
+platform
+Architecture Self-hosted LLM/VLM, deterministic trading engine,
+private RAG
+Safety Boundary No autonomous live-money execution in baseline
+release
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 2 =====
+Private Self-Hosted AI Trading Copilot Platform
+Document Navigation
+This document uses numbered headings, requirement identifiers, interface identifiers, and cross-document
+references. In Microsoft Word, a generated table of contents can be inserted or refreshed from References >
+Table of Contents. The PDF is organized so the heading hierarchy remains visually clear even without a dynamic
+TOC field.
+1. Database Principles
+ PostgreSQL is the source of truth for identities, strategy versions, setups/signals, audit and journal state.
+ pgvector stores embeddings for approved document chunks; vector rows record embedding model version.
+ Raw PDFs/images are stored in private object storage; database stores immutable object key, checksum and
+metadata.
+ Prices and monetary values use NUMERIC/DECIMAL, not float.
+ Timestamps are TIMESTAMPTZ and persisted in UTC.
+ Historical referenced entities use soft-retire/versioning rather than destructive mutation.
+ High-volume candles may be time-partitioned; setup/signal/audit tables retain long-term evidence.
+Figure 1 - High-level entity relationship model
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 3 =====
+Private Self-Hosted AI Trading Copilot Platform
+2. Schema Domains
+Schema / Domain Tables
+identity users, user_roles, sessions, mfa_methods, telegram_accounts,
+api_clients
+knowledge knowledge_documents, document_versions, document_chunks,
+chunk_embeddings, retrieval_events, response_citations
+strategy strategies, strategy_versions, strategy_rules, strategy_scopes,
+strategy_test_cases
+market market_providers, instruments, provider_symbols, candles,
+market_data_gaps, feature_snapshots
+ai model_registry, prompt_versions, agent_runs, agent_steps,
+tool_calls, screenshots, vision_analyses
+trading setups, setup_rule_evaluations, risk_assessments, signals,
+signal_events, setup_reviews
+notification notification_preferences, notifications, notification_deliveries
+paper paper_accounts, paper_trades, paper_trade_events
+journal journal_entries, journal_tags, journal_entry_tags,
+performance_snapshots
+ops outbox_events, idempotency_keys, system_settings,
+audit_events, background_jobs
+3. Detailed Data Dictionary
+3.1 Table: users
+Column Type Constraint Description
+id uuid PK User identifier.
+email citext UNIQUE, NOT NULL Login email.
+password_hash text NOT NULL Argon2id hash only.
+display_name varchar(120) NULL Human display label.
+status varchar(20) NOT NULL active/disabled/locked.
+mfa_required boolean NOT NULL DEFAULT false Whether MFA is mandatory.
+created_at timestamptz NOT NULL Creation timestamp.
+updated_at timestamptz NOT NULL Last update.
+3.2 Table: sessions
+Column Type Constraint Description
+id uuid PK Refresh/session identifier.
+user_id uuid FK users Owner.
+refresh_token_hash text NOT NULL Hash of opaque refresh secret.
+device_name varchar(200) NULL User-facing device label.
+ip_hash text NULL Optional privacy-preserving
+source fingerprint.
+expires_at timestamptz NOT NULL Hard expiry.
+revoked_at timestamptz NULL Revocation time.
+created_at timestamptz NOT NULL Created.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 4 =====
+Private Self-Hosted AI Trading Copilot Platform
+3.3 Table: telegram_accounts
+Column Type Constraint Description
+id uuid PK Link record.
+user_id uuid FK users Application user.
+telegram_user_id bigint UNIQUE, NOT NULL Telegram user id.
+telegram_chat_id bigint NOT NULL Authorized chat id.
+username varchar(255) NULL Informational only; not authority.
+linked_at timestamptz NOT NULL Link time.
+revoked_at timestamptz NULL Unlink time.
+3.4 Table: knowledge_documents
+Column Type Constraint Description
+id uuid PK Logical resource.
+owner_user_id uuid FK users Owner.
+title text NOT NULL Display title.
+document_type varchar(32) NOT NULL course/guide/strategy/note/
+example.
+status varchar(24) NOT NULL quarantined/processing/draft/
+approved/retired/failed.
+current_version_id uuid FK document_versions NULL Current active version.
+created_at timestamptz NOT NULL Created.
+retired_at timestamptz NULL Retirement time.
+3.5 Table: document_versions
+Column Type Constraint Description
+id uuid PK Immutable content version.
+document_id uuid FK knowledge_documents Logical doc.
+version_no int NOT NULL Monotonic per document.
+object_key text NOT NULL Private object storage reference.
+sha256 char(64) NOT NULL Content checksum.
+mime_type varchar(120) NOT NULL Validated MIME.
+size_bytes bigint NOT NULL Raw bytes.
+parser_version varchar(64) NULL Extractor build.
+ingested_at timestamptz NULL Successful ingestion time.
+approved_at timestamptz NULL Approval time.
+3.6 Table: document_chunks
+Column Type Constraint Description
+id uuid PK Chunk id.
+document_version_id uuid FK document_versions Source version.
+ordinal int NOT NULL Source order.
+heading_path text NULL Hierarchical section title.
+page_start int NULL Source page.
+page_end int NULL Source page.
+content text NOT NULL Normalized text.
+token_count int NOT NULL Tokenizer count.
+content_hash char(64) NOT NULL Dedup fingerprint.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 5 =====
+Private Self-Hosted AI Trading Copilot Platform
+Column Type Constraint Description
+metadata jsonb NOT NULL DEFAULT {} Additional source info.
+3.7 Table: chunk_embeddings
+Column Type Constraint Description
+chunk_id uuid PK/FK document_chunks One embedding per model version
+depending implementation.
+embedding_model_id uuid FK model_registry Model.
+vector vector(N) NOT NULL Embedding.
+created_at timestamptz NOT NULL Created.
+3.8 Table: strategies
+Column Type Constraint Description
+id uuid PK Logical strategy.
+owner_user_id uuid FK users Owner.
+name varchar(160) NOT NULL Strategy name.
+description text NULL Overview.
+status varchar(20) NOT NULL active/retired.
+created_at timestamptz NOT NULL Created.
+3.9 Table: strategy_versions
+Column Type Constraint Description
+id uuid PK Immutable strategy version.
+strategy_id uuid FK strategies Parent.
+version_no int NOT NULL Monotonic.
+status varchar(20) NOT NULL draft/published/retired.
+direction_mode varchar(20) NOT NULL long/short/both.
+config jsonb NOT NULL Typed settings and thresholds.
+engine_version varchar(64) NOT NULL Required evaluator build.
+published_at timestamptz NULL Publication time.
+created_by uuid FK users Author.
+created_at timestamptz NOT NULL Created.
+3.10 Table: strategy_rules
+Column Type Constraint Description
+id uuid PK Rule id.
+strategy_version_id uuid FK strategy_versions Version.
+code varchar(100) NOT NULL Stable rule code within version.
+name text NOT NULL Human name.
+rule_type varchar(32) NOT NULL comparison/composite/sequence/
+etc.
+expression jsonb NOT NULL Constrained DSL.
+required boolean NOT NULL Hard requirement.
+weight numeric(8,3) NOT NULL DEFAULT 0 Optional score weight.
+sort_order int NOT NULL Display/evaluation order.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 6 =====
+Private Self-Hosted AI Trading Copilot Platform
+3.11 Table: instruments
+Column Type Constraint Description
+id uuid PK Normalized instrument.
+canonical_symbol varchar(64) UNIQUE, NOT NULL Internal symbol.
+asset_class varchar(24) NOT NULL crypto/fx/equity/etc.
+base_asset varchar(32) NULL Base.
+quote_asset varchar(32) NULL Quote.
+price_tick numeric(30,12) NULL Minimum price increment.
+qty_step numeric(30,12) NULL Quantity step.
+enabled boolean NOT NULL DEFAULT true Scan eligibility.
+3.12 Table: candles
+Column Type Constraint Description
+instrument_id uuid FK instruments Instrument.
+timeframe varchar(12) NOT NULL 1m/5m/15m/1h/...
+open_time timestamptz NOT NULL Candle start.
+open numeric(30,12) NOT NULL Open.
+high numeric(30,12) NOT NULL High.
+low numeric(30,12) NOT NULL Low.
+close numeric(30,12) NOT NULL Close.
+volume numeric(38,12) NULL Volume.
+provider_id uuid FK market_providers Source.
+is_final boolean NOT NULL Finalized candle.
+quality_flags jsonb NOT NULL DEFAULT [] Gap/correction flags.
+received_at timestamptz NOT NULL Ingestion time.
+PK composite instrument_id,timeframe,open_ti
+me,provider_id
+3.13 Table: screenshots
+Column Type Constraint Description
+id uuid PK Screenshot.
+user_id uuid FK users Uploader.
+object_key text NOT NULL Private object ref.
+sha256 char(64) NOT NULL Checksum.
+mime_type varchar(64) NOT NULL Image type.
+width_px int NULL Width.
+height_px int NULL Height.
+source_channel varchar(20) NOT NULL mobile/telegram.
+created_at timestamptz NOT NULL Uploaded.
+expires_at timestamptz NULL Retention deadline.
+3.14 Table: agent_runs
+Column Type Constraint Description
+id uuid PK Workflow run.
+user_id uuid FK users NULL Actor if interactive.
+workflow_type varchar(50) NOT NULL query/screenshot/scan/etc.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 7 =====
+Private Self-Hosted AI Trading Copilot Platform
+Column Type Constraint Description
+status varchar(20) NOT NULL queued/running/succeeded/failed.
+correlation_id uuid NOT NULL Cross-service correlation.
+model_profile varchar(80) NULL Logical model profile.
+started_at timestamptz NULL Start.
+completed_at timestamptz NULL End.
+error_code varchar(80) NULL Controlled error.
+3.15 Table: agent_steps
+Column Type Constraint Description
+id uuid PK Step.
+agent_run_id uuid FK agent_runs Parent.
+agent_id varchar(20) NOT NULL AG-01..AG-08.
+sequence_no int NOT NULL Order.
+prompt_version_id uuid FK prompt_versions NULL Prompt.
+model_id uuid FK model_registry NULL Model.
+input_summary jsonb NOT NULL Redacted structured input
+metadata.
+output_json jsonb NULL Validated structured output.
+duration_ms int NULL Latency.
+status varchar(20) NOT NULL Status.
+3.16 Table: setups
+Column Type Constraint Description
+id uuid PK Candidate setup.
+strategy_version_id uuid FK strategy_versions Exact strategy.
+instrument_id uuid FK instruments Market.
+timeframe varchar(12) NOT NULL Evaluation timeframe.
+direction varchar(8) NOT NULL long/short.
+evaluated_at timestamptz NOT NULL Decision timestamp.
+market_asof timestamptz NOT NULL Freshness anchor.
+state varchar(30) NOT NULL candidate/watch/ready/etc.
+score numeric(6,3) NULL Optional score.
+entry_low numeric(30,12) NULL Entry zone low.
+entry_high numeric(30,12) NULL Entry zone high.
+stop_price numeric(30,12) NULL Invalidation.
+expires_at timestamptz NULL Setup expiry.
+source_agent_run_id uuid FK agent_runs NULL AI provenance.
+created_at timestamptz NOT NULL Created.
+3.17 Table: setup_rule_evaluations
+Column Type Constraint Description
+id uuid PK Evaluation row.
+setup_id uuid FK setups Setup.
+strategy_rule_id uuid FK strategy_rules Rule.
+result varchar(10) NOT NULL true/false/unknown.
+actual_value jsonb NULL Observed feature.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 8 =====
+Private Self-Hosted AI Trading Copilot Platform
+Column Type Constraint Description
+expected_value jsonb NULL Rule target.
+evidence jsonb NOT NULL DEFAULT {} Candle/feature/source refs.
+engine_version varchar(64) NOT NULL Evaluator version.
+3.18 Table: risk_assessments
+Column Type Constraint Description
+id uuid PK Risk result.
+setup_id uuid FK setups UNIQUE Setup.
+entry_reference numeric(30,12) NULL Chosen risk entry.
+stop_price numeric(30,12) NULL Stop.
+target_1 numeric(30,12) NULL Target.
+risk_distance numeric(30,12) NULL Distance.
+reward_distance numeric(30,12) NULL Distance.
+rr_ratio numeric(12,4) NULL Reward/risk.
+hard_blockers jsonb NOT NULL DEFAULT [] Blocking reasons.
+warnings jsonb NOT NULL DEFAULT [] Non-blocking.
+engine_version varchar(64) NOT NULL Risk engine.
+created_at timestamptz NOT NULL Created.
+3.19 Table: signals
+Column Type Constraint Description
+id uuid PK User-facing signal.
+setup_id uuid FK setups Source.
+status varchar(30) NOT NULL ready/invalidated/expired/closed.
+published_at timestamptz NULL First publish.
+dedupe_key varchar(200) UNIQUE, NOT NULL Logical duplicate guard.
+summary text NULL User-facing concise summary.
+created_at timestamptz NOT NULL Created.
+3.20 Table: notifications
+Column Type Constraint Description
+id uuid PK Logical notification.
+signal_id uuid FK signals NULL Related signal.
+user_id uuid FK users Recipient.
+channel varchar(20) NOT NULL telegram/push/in_app.
+template_code varchar(80) NOT NULL Versioned template.
+payload jsonb NOT NULL Rendered-safe content.
+dedupe_key varchar(200) UNIQUE, NOT NULL Duplicate guard.
+status varchar(20) NOT NULL pending/sent/failed.
+created_at timestamptz NOT NULL Created.
+3.21 Table: paper_trades
+Column Type Constraint Description
+id uuid PK Paper position.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 9 =====
+Private Self-Hosted AI Trading Copilot Platform
+Column Type Constraint Description
+user_id uuid FK users Owner.
+setup_id uuid FK setups NULL Source setup.
+instrument_id uuid FK instruments Market.
+direction varchar(8) NOT NULL long/short.
+entry_price numeric(30,12) NOT NULL Simulated fill.
+stop_price numeric(30,12) NOT NULL Initial stop.
+quantity numeric(30,12) NULL Hypothetical quantity.
+opened_at timestamptz NOT NULL Open time.
+closed_at timestamptz NULL Close.
+exit_price numeric(30,12) NULL Exit.
+realized_r numeric(12,4) NULL Normalized outcome.
+status varchar(20) NOT NULL open/closed/cancelled.
+resolution_policy varchar(64) NOT NULL Same-candle ambiguity policy.
+3.22 Table: audit_events
+Column Type Constraint Description
+id uuid PK Audit id.
+occurred_at timestamptz NOT NULL Event time.
+actor_type varchar(20) NOT NULL user/service/system.
+actor_id uuid NULL Actor.
+action varchar(100) NOT NULL Stable action code.
+resource_type varchar(80) NULL Entity type.
+resource_id uuid NULL Entity.
+correlation_id uuid NULL Request correlation.
+metadata jsonb NOT NULL DEFAULT {} Redacted context.
+prev_hash char(64) NULL Optional tamper-evident chain.
+event_hash char(64) NULL Optional chain hash.
+3.23 Table: outbox_events
+Column Type Constraint Description
+id uuid PK Outbox row.
+topic varchar(120) NOT NULL Event topic.
+aggregate_type varchar(80) NOT NULL Entity type.
+aggregate_id uuid NOT NULL Entity id.
+payload jsonb NOT NULL Event payload.
+created_at timestamptz NOT NULL Created in same tx.
+published_at timestamptz NULL Broker publish time.
+attempt_count int NOT NULL DEFAULT 0 Retries.
+last_error text NULL Last failure.
+4. Additional Tables and Purpose
+Table Purpose
+user_roles Maps users to role/capability sets.
+mfa_methods TOTP/WebAuthn metadata; secret protected/encrypted.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 10 =====
+Private Self-Hosted AI Trading Copilot Platform
+Table Purpose
+api_clients Scoped service account credentials.
+retrieval_events Stores query, filters, chunk ids/ranks/scores and retrieval model.
+response_citations Links an AI response/agent step to exact chunks used.
+strategy_scopes Symbol/timeframe/session eligibility rows where normalized
+representation is preferred over JSON.
+strategy_test_cases Fixtures with input feature snapshots and expected rule outcomes.
+market_providers Provider endpoint/config metadata excluding plaintext secrets.
+provider_symbols Maps provider symbol/interval conventions to canonical
+instrument.
+market_data_gaps Detected missing candle ranges and resolution status.
+feature_snapshots Optional persisted derived values for evidence/debugging.
+model_registry Model name/path/hash, family, modality, quantization, context,
+serving profile.
+prompt_versions Immutable prompt/policy templates with hash and activation state.
+tool_calls Agent tool invocation metadata, args summary, result status,
+latency.
+vision_analyses Structured output for screenshots and confidence fields.
+signal_events Append-only signal state transition history.
+setup_reviews User accept/ignore/paper-entry/dismiss decisions.
+notification_preferences Per-channel/strategy/symbol quiet-hour settings.
+notification_deliveries Provider attempt id, response code, retry schedule.
+paper_accounts Hypothetical equity/base currency/risk configuration.
+paper_trade_events Target/stop/manual-close events and price evidence.
+journal_entries User/system notes linked to setup/trade.
+journal_tags Controlled/freeform tags.
+performance_snapshots Materialized cohort metrics with source window/version.
+idempotency_keys Request/job idempotency result cache.
+system_settings Versioned non-secret operational flags and thresholds.
+background_jobs Optional app-level registry for long-running jobs.
+5. Keys, Constraints and Integrity Rules
+Table Integrity Rule
+strategy_versions UNIQUE(strategy_id, version_no); published versions immutable via
+application and DB trigger/policy where desired.
+strategy_rules UNIQUE(strategy_version_id, code); weight >= 0; expression schema
+validated application-side and optionally JSON schema extension.
+candles PRIMARY KEY(instrument_id,timeframe,open_time,provider_id); CHECK
+high>=greatest(open,close,low) and low<=least(open,close,high) with care
+for corrected feeds.
+document_versions UNIQUE(document_id, version_no); UNIQUE(sha256, document_id)
+optional.
+document_chunks UNIQUE(document_version_id, ordinal); content_hash indexed for
+dedupe.
+setups CHECK direction IN (long,short); stop/entry relationship validated by
+domain service because entry may be zone.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 11 =====
+Private Self-Hosted AI Trading Copilot Platform
+Table Integrity Rule
+setup_rule_evaluations UNIQUE(setup_id,strategy_rule_id).
+risk_assessments UNIQUE(setup_id); rr_ratio >= 0 when present.
+signals UNIQUE(dedupe_key); at most one primary signal per setup policy.
+notifications UNIQUE(dedupe_key).
+telegram_accounts UNIQUE(telegram_user_id) for single-owner baseline.
+agent_steps UNIQUE(agent_run_id, sequence_no).
+paper_trades realized_r nullable until close; closed status requires closed_at and
+exit_price.
+6. Indexing Strategy
+Table Index Purpose
+candles (instrument_id,timeframe,open_time DESC) Latest/window candle reads.
+candles BRIN(open_time) on very large partitions Time-range scans.
+document_chunks GIN(to_tsvector(...content...)) Hybrid full-text retrieval.
+chunk_embeddings HNSW or IVFFlat(vector cosine_ops) Approximate vector search; tune after
+corpus size known.
+setups (state, evaluated_at DESC) Active/recent dashboard.
+setups (instrument_id,timeframe,evaluated_at Market history.
+DESC)
+signals (status,published_at DESC) Active signal feed.
+notifications (status,created_at) Delivery worker polling.
+audit_events (occurred_at DESC), (actor_id,occurred_at Audit filtering.
+DESC), (resource_type,resource_id)
+agent_runs (status,started_at DESC), correlation_id Ops/debug.
+paper_trades (user_id,status,opened_at DESC) Portfolio/journal.
+outbox_events partial index WHERE published_at IS NULL Dispatcher efficiency.
+7. Partitioning and Retention
+Data Partition / Retention Recommendation
+Candles Monthly partitions for 1m/high-volume data; larger timeframes
+may remain unpartitioned initially. Retention based on backtest
+need.
+Audit Events Monthly/yearly partition optional; retain long-term (e.g., 2+
+years) for traceability.
+Agent Steps/Tool Calls Retain structured metadata 90-365 days; redact/limit full
+prompts if sensitive.
+Screenshots Configurable 30-180 days unless attached to journal/setup
+evidence.
+Raw Documents Retain approved versions while referenced; retired content
+archived, not silently deleted.
+Notifications Delivery attempts 90-180 days; logical signal history longer.
+Embeddings Regenerable but retain while model version active; purge old
+model vectors after migration verification.
+Backtest Artifacts Retain summary indefinitely; large per-trade artifacts according
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 12 =====
+Private Self-Hosted AI Trading Copilot Platform
+Data Partition / Retention Recommendation
+to storage budget.
+8. Example DDL
+CREATE TABLE strategy_versions (
+id uuid PRIMARY KEY,
+strategy_id uuid NOT NULL REFERENCES strategies(id),
+version_no integer NOT NULL,
+status varchar(20) NOT NULL CHECK (status IN ('draft','published','retired')),
+direction_mode varchar(20) NOT NULL,
+config jsonb NOT NULL DEFAULT '{}'::jsonb,
+engine_version varchar(64) NOT NULL,
+created_by uuid NOT NULL REFERENCES users(id),
+created_at timestamptz NOT NULL DEFAULT now(),
+published_at timestamptz,
+UNIQUE(strategy_id, version_no)
+);
+CREATE TABLE setups (
+id uuid PRIMARY KEY,
+strategy_version_id uuid NOT NULL REFERENCES strategy_versions(id),
+instrument_id uuid NOT NULL REFERENCES instruments(id),
+timeframe varchar(12) NOT NULL,
+direction varchar(8) NOT NULL CHECK (direction IN ('long','short')),
+evaluated_at timestamptz NOT NULL,
+market_asof timestamptz NOT NULL,
+state varchar(30) NOT NULL,
+score numeric(6,3),
+entry_low numeric(30,12),
+entry_high numeric(30,12),
+stop_price numeric(30,12),
+expires_at timestamptz,
+source_agent_run_id uuid REFERENCES agent_runs(id),
+created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_setups_state_time ON setups(state, evaluated_at DESC);
+9. Transaction Boundaries
+Operation Transaction Rule
+Publish strategy Insert immutable version/rules + set published state + audit
+event atomically.
+Create signal Persist setup/rule/risk state + signal + outbox event in one
+transaction.
+Notification delivery Provider call outside DB transaction; update delivery result
+afterward using idempotent key.
+Paper trade close Persist close event, trade result and journal trigger/outbox
+atomically.
+Document approval Mark version approved/current atomically; embedding
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 13 =====
+Private Self-Hosted AI Trading Copilot Platform
+Operation Transaction Rule
+completeness checked before commit.
+10. Data Lineage and Reproducibility
+A setup must be reproducible to the practical extent possible. The persistence chain is: setup -> strategy_version
+-> strategy_rules -> rule_evaluations -> evidence candle ids/features -> risk_assessment -> optional
+agent_run/steps -> model/prompt ids -> signal -> notification -> paper/journal outcome. Backtests additionally pin
+dataset fingerprint, code/engine version and resolution assumptions.
+11. Backup, Restore and Migration
+ Perform PostgreSQL logical or physical backups on a schedule aligned to RPO; encrypt before leaving host.
+ Back up object-storage metadata and raw resources, or ensure bucket versioning/redundancy separately.
+ Restore drills must validate referential integrity and sample document/screenshot retrieval.
+ Use schema migration tooling (Alembic recommended for FastAPI/SQLAlchemy). Each deployment runs only
+reviewed forward migrations.
+ Large destructive changes use expand-and-contract: add new column/table, dual write/backfill, switch reads,
+then remove old structure in later release.
+ Vector-dimension/model changes create parallel embedding rows or new table/index until migration is
+complete.
+12. Privacy and Audit
+ Avoid storing raw access tokens; store hashes or encrypted secrets as appropriate.
+ Do not persist model prompts containing secrets; input summaries should be redacted.
+ Audit metadata should capture identifiers and changed field names/old-new hashes rather than secret
+values.
+ User deletion, if ever required in a multi-user release, must preserve legally/operationally required
+anonymized audit and referenced trading artifacts according to policy.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 14 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix A - Complete Table Catalogue
+Table Purpose
+identity.users User principal and status.
+identity.user_roles RBAC assignments.
+identity.sessions Refresh sessions/devices.
+identity.mfa_methods MFA registrations.
+identity.telegram_accounts Telegram identity link.
+identity.api_clients Service identities.
+knowledge.knowledge_documents Logical private resource.
+knowledge.document_versions Immutable raw content versions.
+knowledge.document_chunks Retrievable normalized chunks.
+knowledge.chunk_embeddings Embedding vectors by model.
+knowledge.retrieval_events Retrieval diagnostics.
+knowledge.response_citations Response-to-source lineage.
+strategy.strategies Logical strategy.
+strategy.strategy_versions Immutable published versions.
+strategy.strategy_rules Typed rule definitions.
+strategy.strategy_scopes Eligible market/time/session scope.
+strategy.strategy_test_cases Rule/strategy fixtures.
+market.market_providers Provider configuration metadata.
+market.instruments Canonical instruments.
+market.provider_symbols Provider mappings.
+market.candles OHLCV history.
+market.market_data_gaps Data-quality gaps/corrections.
+market.feature_snapshots Optional derived evidence cache.
+ai.model_registry Self-hosted model identity/config.
+ai.prompt_versions Immutable prompt/policy versions.
+ai.agent_runs Top-level workflows.
+ai.agent_steps Individual agent execution.
+ai.tool_calls Tool invocation audit.
+ai.screenshots Uploaded chart image metadata.
+ai.vision_analyses Structured VLM extraction.
+trading.setups Candidate setup state.
+trading.setup_rule_evaluations Rule outcomes/evidence.
+trading.risk_assessments Deterministic risk result.
+trading.signals User-facing signal.
+trading.signal_events Signal transition history.
+trading.setup_reviews Human review actions.
+notification.notification_preferences Channel/filter preferences.
+notification.notifications Logical outbound message.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 15 =====
+Private Self-Hosted AI Trading Copilot Platform
+Table Purpose
+notification.notification_deliveries Per-attempt provider delivery.
+paper.paper_accounts Hypothetical account/risk config.
+paper.paper_trades Paper positions.
+paper.paper_trade_events Paper lifecycle evidence.
+journal.journal_entries Notes/context.
+journal.journal_tags Tags.
+journal.journal_entry_tags Join table.
+journal.performance_snapshots Cached aggregate metrics.
+ops.outbox_events Reliable event publishing.
+ops.idempotency_keys Duplicate request/job protection.
+ops.system_settings Non-secret runtime configuration.
+ops.audit_events Security/business audit.
+ops.background_jobs Long-running job status.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 16 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix B - Recommended Enum Values
+Domain Values
+document_status quarantined, parsing, chunking, embedding, draft,
+approved, failed, retired
+strategy_version_status draft, published, retired
+rule_result true, false, unknown
+setup_state candidate, watch, ready_for_review, invalidated, expired,
+closed
+signal_status ready_for_review, invalidated, expired, closed
+agent_run_status queued, running, succeeded, failed, cancelled
+job_status queued, running, retrying, succeeded, failed, dead_letter,
+cancelled
+notification_status pending, sending, sent, retrying, failed, suppressed
+paper_trade_status open, closed, cancelled
+review_action accepted, ignored, dismissed, paper_entered
+source_channel mobile, telegram, api, system
+direction long, short
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 17 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix C - Example DDL for Critical Tables
+CREATE TABLE setup_rule_evaluations (
+id uuid PRIMARY KEY,
+setup_id uuid NOT NULL REFERENCES setups(id) ON DELETE CASCADE,
+strategy_rule_id uuid NOT NULL REFERENCES strategy_rules(id),
+result varchar(10) NOT NULL CHECK (result IN ('true','false','unknown')),
+actual_value jsonb,
+expected_value jsonb,
+evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+engine_version varchar(64) NOT NULL,
+created_at timestamptz NOT NULL DEFAULT now(),
+UNIQUE(setup_id, strategy_rule_id)
+);
+CREATE TABLE outbox_events (
+id uuid PRIMARY KEY,
+topic varchar(120) NOT NULL,
+aggregate_type varchar(80) NOT NULL,
+aggregate_id uuid NOT NULL,
+payload jsonb NOT NULL,
+created_at timestamptz NOT NULL DEFAULT now(),
+published_at timestamptz,
+attempt_count integer NOT NULL DEFAULT 0,
+last_error text
+);
+CREATE INDEX ix_outbox_pending ON outbox_events(created_at)
+WHERE published_at IS NULL;
+CREATE TABLE audit_events (
+id uuid PRIMARY KEY,
+occurred_at timestamptz NOT NULL DEFAULT now(),
+actor_type varchar(20) NOT NULL,
+actor_id uuid,
+action varchar(100) NOT NULL,
+resource_type varchar(80),
+resource_id uuid,
+correlation_id uuid,
+metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+prev_hash char(64),
+event_hash char(64)
+);
+CREATE INDEX ix_audit_time ON audit_events(occurred_at DESC);
+CREATE INDEX ix_audit_resource ON audit_events(resource_type, resource_id, occurred_at DESC);
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 18 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix D - Query Patterns and Performance
+Query Pattern Index/Optimization
+Active setups WHERE state IN Composite state/time index.
+(candidate,watch,ready_for_review)
+ORDER BY evaluated_at DESC
+Latest candles WHERE instrument_id=? AND Instrument/timeframe/time index or
+timeframe=? ORDER BY open_time DESC partition local index.
+LIMIT N
+Vector retrieval metadata filter approved/version + HNSW cosine index + relational filter
+ORDER BY vector <=> query LIMIT K strategy.
+Setup detail Join setup -> version -> rule eval -> risk -> Indexes on all FK columns; small
+signal events cardinality per setup.
+Journal analytics Group paper trades/outcomes by Precomputed materialized/performance
+strategy/symbol/timeframe/window snapshots for dashboards.
+Pending notifications status pending/retrying and Partial composite index.
+next_attempt_at <= now
+Outbox dispatch published_at IS NULL ORDER BY Partial index.
+created_at
+Audit search actor/resource/time filters Separate actor/time and resource/time
+indexes.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 19 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix E - Deletion and Referential Behavior
+Relationship Recommended Behavior Reason
+strategy -> versions RESTRICT hard delete when referenced; Historical setup reproducibility.
+retire logical strategy
+strategy_version -> rules CASCADE only before publish/draft Rules belong exclusively to version.
+cleanup; published immutable
+setup -> evaluations CASCADE if test-only setup deleted; Evidence lifecycle.
+production setups retained
+setup -> signal/risk/reviews RESTRICT/CASCADE according to archival Auditability.
+policy, but production history retained
+document -> versions/chunks Retire by default; hard delete only if Citation integrity.
+unreferenced and policy allows
+user -> audit Do not cascade audit; anonymize actor Security history.
+reference if legally required
+screenshot -> analysis Image object may expire; retain Storage minimization.
+structured analysis/evidence reference
+per retention
+instrument -> candles/setups RESTRICT; disable instead of delete Historical data integrity.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 20 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix F - Retention Job Design
+ Nightly job selects expired screenshots not pinned to retained journal/setup evidence, deletes object, marks
+purged_at and preserves checksum/metadata if policy requires.
+ Agent tool-call raw payloads older than configured period are summarized/redacted or deleted; structured
+run metadata remains.
+ Dead-letter and delivery attempt detail is compacted after operational window while logical notification
+remains.
+ Old embeddings are deleted only after a new embedding model migration reaches 100% coverage and
+retrieval smoke tests pass.
+ Candle retention must never remove periods required by pinned backtest artifacts without first marking
+those artifacts non-reproducible or exporting their dataset.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 21 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix G - Database Security
+Identity Permissions
+app_api CRUD on user-facing domain tables through migrations-
+defined grants; no superuser, no schema ownership.
+worker_market Insert/update candles/gaps, read instruments/providers; no
+identity secrets.
+worker_ai Read approved chunks/model prompts, write agent runs; no
+auth credential tables beyond user id context.
+worker_notify Read pending notifications/preferences, write delivery
+results; no strategies raw documents unless needed in
+payload already rendered.
+migration_role DDL owner, used only during controlled deployment.
+backup_role Read/backup privileges; credentials isolated from
+application.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
+
+===== PAGE 22 =====
+Private Self-Hosted AI Trading Copilot Platform
+Appendix H - Migration Plan from MVP to Scale
+Phase Change
+Phase 1 Single public schema acceptable but logical domains
+represented in naming/migrations.
+Phase 2 Move high-volume candles to partitioned table/Timescale
+hypertable without changing canonical API.
+Phase 3 Split embeddings by model/version; introduce reranking
+metadata.
+Phase 4 Materialize analytics views/snapshots as journal grows.
+Phase 5 Read replicas/HA PostgreSQL; connection pooler; archive
+cold candle partitions.
+Database Design Specification | 2.0 - Detailed Engineering Specification | October 2026
