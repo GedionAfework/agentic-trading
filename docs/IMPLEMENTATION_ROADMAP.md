@@ -1,10 +1,11 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phase 0 in progress**  
+**Status:** Active build plan — **Phase 0 draft + Phase 1 landing**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
-**Phase 0 workspace:** [`docs/strategy/`](./strategy/README.md)
+**Phase 0 workspace:** [`docs/strategy/`](./strategy/README.md)  
+**Phase 1:** uv workspace, FastAPI `/health`, Compose stack under `infra/docker/`
 
 ---
 

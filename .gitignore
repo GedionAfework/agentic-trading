@@ -1,7 +1,34 @@
-﻿# Ignore local course dumps and secrets; keep structure
-resources/incoming/**
-!resources/incoming/.gitkeep
-!resources/README.md
+﻿# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Env & secrets
 .env
 .env.*
 !.env.example
+
+# Local course dumps / heavy resources
+resources/incoming/**
+!resources/incoming/.gitkeep
+!resources/README.md
+resources/labels/**
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Temp extraction
+tmp/
+notebooks/.ipynb_checkpoints/
