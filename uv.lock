@@ -39,6 +39,7 @@ dependencies = [
     { name = "private-trading-api" },
     { name = "private-trading-backtest" },
     { name = "private-trading-db" },
+    { name = "private-trading-decision" },
     { name = "private-trading-features" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
@@ -65,6 +66,7 @@ requires-dist = [
     { name = "private-trading-api", editable = "apps/api" },
     { name = "private-trading-backtest", editable = "packages/backtest" },
     { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-decision", editable = "packages/decision" },
     { name = "private-trading-features", editable = "packages/features" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
@@ -1184,6 +1186,7 @@ dependencies = [
     { name = "private-trading-backtest" },
     { name = "private-trading-core" },
     { name = "private-trading-db" },
+    { name = "private-trading-decision" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
     { name = "private-trading-risk" },
@@ -1199,6 +1202,7 @@ requires-dist = [
     { name = "private-trading-backtest", editable = "packages/backtest" },
     { name = "private-trading-core", editable = "packages/core" },
     { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-decision", editable = "packages/decision" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
     { name = "private-trading-risk", editable = "packages/risk" },
@@ -1275,11 +1279,25 @@ name = "private-trading-decision"
 version = "0.1.0"
 source = { editable = "packages/decision" }
 dependencies = [
+    { name = "private-trading-backtest" },
     { name = "private-trading-core" },
+    { name = "private-trading-db" },
+    { name = "private-trading-features" },
+    { name = "private-trading-knowledge" },
+    { name = "private-trading-risk" },
+    { name = "private-trading-strategies" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "private-trading-core", editable = "packages/core" }]
+requires-dist = [
+    { name = "private-trading-backtest", editable = "packages/backtest" },
+    { name = "private-trading-core", editable = "packages/core" },
+    { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-features", editable = "packages/features" },
+    { name = "private-trading-knowledge", editable = "packages/knowledge" },
+    { name = "private-trading-risk", editable = "packages/risk" },
+    { name = "private-trading-strategies", editable = "packages/strategies" },
+]
 
 [[package]]
 name = "private-trading-features"

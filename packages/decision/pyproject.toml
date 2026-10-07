@@ -5,6 +5,12 @@ description = "Decision ML training and inference"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "private-trading-db",
+    "private-trading-features",
+    "private-trading-strategies",
+    "private-trading-risk",
+    "private-trading-backtest",
+    "private-trading-knowledge",
 ]
 
 [build-system]
@@ -16,3 +22,9 @@ packages = ["src/private_trading_decision"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }
+private-trading-features = { workspace = true }
+private-trading-strategies = { workspace = true }
+private-trading-risk = { workspace = true }
+private-trading-backtest = { workspace = true }
+private-trading-knowledge = { workspace = true }

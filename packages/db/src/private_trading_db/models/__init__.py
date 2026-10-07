@@ -36,6 +36,7 @@ from private_trading_db.models.strategy import (
     StrategyTestCase,
     StrategyVersion,
 )
+from private_trading_db.models.training import TrainingDataset, TrainingDatasetVersion
 
 __all__ = [
     "User",
@@ -70,4 +71,6 @@ __all__ = [
     "RiskAssessment",
     "BacktestDataset",
     "BacktestJob",
+    "TrainingDataset",
+    "TrainingDatasetVersion",
 ]
