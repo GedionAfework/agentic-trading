@@ -13,9 +13,11 @@ from private_trading_db.session import dispose_engine
 from private_trading_api.errors import register_exception_handlers
 from private_trading_api.routes.ai import router as ai_router
 from private_trading_api.routes.auth import router as auth_router
+from private_trading_api.routes.backtests import router as backtests_router
 from private_trading_api.routes.health import router as health_router
 from private_trading_api.routes.knowledge import router as knowledge_router
 from private_trading_api.routes.markets import router as markets_router
+from private_trading_api.routes.risk import router as risk_router
 from private_trading_api.routes.strategies import router as strategies_router
 
 logger = get_logger(__name__)
@@ -78,6 +80,8 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router, prefix="/v1")
     app.include_router(markets_router, prefix="/v1")
     app.include_router(strategies_router, prefix="/v1")
+    app.include_router(risk_router, prefix="/v1")
+    app.include_router(backtests_router, prefix="/v1")
     return app
 
 

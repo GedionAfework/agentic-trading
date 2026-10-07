@@ -6,6 +6,7 @@ from private_trading_db.models.identity import (
     User,
     UserRole,
 )
+from private_trading_db.models.backtest import BacktestDataset, BacktestJob
 from private_trading_db.models.knowledge import (
     ChunkEmbedding,
     DocumentChunk,
@@ -27,6 +28,7 @@ from private_trading_db.models.ops import (
     OutboxEvent,
     SystemSetting,
 )
+from private_trading_db.models.risk import RiskAssessment, RiskPolicy, RiskPolicyVersion
 from private_trading_db.models.strategy import (
     Strategy,
     StrategyRule,
@@ -63,4 +65,9 @@ __all__ = [
     "StrategyRule",
     "StrategyScope",
     "StrategyTestCase",
+    "RiskPolicy",
+    "RiskPolicyVersion",
+    "RiskAssessment",
+    "BacktestDataset",
+    "BacktestJob",
 ]

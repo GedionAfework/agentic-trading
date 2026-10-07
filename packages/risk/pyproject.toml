@@ -5,6 +5,7 @@ description = "Risk and portfolio limits"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "private-trading-db",
 ]
 
 [build-system]
@@ -16,3 +17,4 @@ packages = ["src/private_trading_risk"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }
