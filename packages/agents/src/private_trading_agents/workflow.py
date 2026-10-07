@@ -20,6 +20,7 @@ from private_trading_strategies.types import Direction, SetupState
 from private_trading_strategies.wyckoff_hdm import build_wyckoff_hdm_v1
 
 from private_trading_agents.explain import grounded_explanation
+from private_trading_agents.vision import VisionVerdict
 
 WORKFLOW_VERSION = "0.1.0"
 
@@ -133,6 +134,7 @@ def run_decision_workflow(
     model_id: UUID | None = None,
     model_mode: str | None = None,
     min_rr: str = "2.0",
+    vision: VisionVerdict | None = None,
 ) -> DecisionSnapshot:
     """AG-01 orchestrates AG-04, AG-05, AG-06, optional AG-09, then AG-02 explanation."""
     index = len(bars) - 1 if bar_index is None else bar_index
@@ -145,7 +147,11 @@ def run_decision_workflow(
             "status": "ok",
             "note": f"{symbol} {timeframe} bar {index} fresh={data_fresh}",
         },
-        {"agent": "AG-03", "status": "skipped", "note": "vision is phase 13"},
+        {
+            "agent": "AG-03",
+            "status": "skipped" if vision is None else vision.status,
+            "note": "vision not attached" if vision is None else "supporting evidence only",
+        },
         {"agent": "AG-08", "status": "skipped", "note": "journal is a later phase"},
     ]
     features = _feature_payload(bars, index)
@@ -265,6 +271,11 @@ def run_decision_workflow(
         hard_blockers.append("model_abstain")
     else:
         action = DecisionAction.ENTER
+
+    if vision is not None and vision.needs_clarification and action == DecisionAction.ENTER:
+        action = DecisionAction.WAIT
+        if vision.blocker and vision.blocker not in hard_blockers:
+            hard_blockers.append(vision.blocker)
 
     band = _confidence(
         action=action,

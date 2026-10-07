@@ -39,6 +39,7 @@ from private_trading_db.models.strategy import (
 from private_trading_db.models.decision_model import DecisionModel
 from private_trading_db.models.decision_record import DecisionRecord
 from private_trading_db.models.training import TrainingDataset, TrainingDatasetVersion
+from private_trading_db.models.vision import ScreenshotJob
 
 __all__ = [
     "User",
@@ -77,4 +78,5 @@ __all__ = [
     "TrainingDatasetVersion",
     "DecisionModel",
     "DecisionRecord",
+    "ScreenshotJob",
 ]

@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from private_trading_agents.service import get_decision_record, run_and_persist
+from private_trading_agents.vision_service import get_screenshot_job, verdict_from_job
 from private_trading_backtest.fixtures import (
     FIXTURE_SYMBOL,
     FIXTURE_TIMEFRAME,
@@ -78,6 +79,12 @@ async def post_run(
             raise NotFoundError("Decision model not found")
         model = load_model_artifact(stored)
         model_mode = stored.mode
+    vision = None
+    if body.screenshot_job_id is not None:
+        shot = await get_screenshot_job(session, body.screenshot_job_id)
+        if shot is None:
+            raise NotFoundError("Screenshot job not found")
+        vision = verdict_from_job(shot)
     record = await run_and_persist(
         session,
         owner_user_id=user.id,
@@ -92,6 +99,7 @@ async def post_run(
         model=model,
         model_id=body.decision_model_id,
         model_mode=model_mode,
+        vision=vision,
     )
     await record_audit(
         session,

@@ -10,6 +10,7 @@ from private_trading_features.types import CandleBar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from private_trading_agents.vision import VisionVerdict
 from private_trading_agents.workflow import CitationRef, DecisionSnapshot, run_decision_workflow
 
 
@@ -91,6 +92,7 @@ async def run_and_persist(
     model: Any = None,
     model_id: uuid.UUID | None = None,
     model_mode: str | None = None,
+    vision: VisionVerdict | None = None,
 ) -> DecisionRecord:
     snapshot = run_decision_workflow(
         bars,
@@ -111,5 +113,6 @@ async def run_and_persist(
         model=model,
         model_id=model_id,
         model_mode=model_mode,
+        vision=vision,
     )
     return await persist_decision(session, owner_user_id=owner_user_id, snapshot=snapshot)

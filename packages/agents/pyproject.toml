@@ -10,6 +10,8 @@ dependencies = [
     "private-trading-strategies",
     "private-trading-risk",
     "private-trading-decision",
+    "private-trading-market-data",
+    "private-trading-knowledge",
 ]
 
 [build-system]
@@ -26,3 +28,5 @@ private-trading-features = { workspace = true }
 private-trading-strategies = { workspace = true }
 private-trading-risk = { workspace = true }
 private-trading-decision = { workspace = true }
+private-trading-market-data = { workspace = true }
+private-trading-knowledge = { workspace = true }

@@ -21,6 +21,7 @@ class RunDecisionRequest(BaseModel):
     position_state: Literal["flat", "open"] = "flat"
     citations: list[CitationIn] = Field(default_factory=list)
     decision_model_id: uuid.UUID | None = None
+    screenshot_job_id: uuid.UUID | None = None
 
 
 class DecisionRecordOut(BaseModel):
