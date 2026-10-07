@@ -29,6 +29,7 @@ from private_trading_db.models.ops import (
     SystemSetting,
 )
 from private_trading_db.models.risk import RiskAssessment, RiskPolicy, RiskPolicyVersion
+from private_trading_db.models.scanner import ScanRun, SignalCandidate
 from private_trading_db.models.strategy import (
     Strategy,
     StrategyRule,
@@ -79,4 +80,6 @@ __all__ = [
     "DecisionModel",
     "DecisionRecord",
     "ScreenshotJob",
+    "ScanRun",
+    "SignalCandidate",
 ]

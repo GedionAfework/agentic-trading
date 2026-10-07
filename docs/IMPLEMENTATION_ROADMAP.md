@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phase 13 landing**  
+**Status:** Active build plan — **Phases 0–14 landed; Phase 15 next**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -17,7 +17,8 @@
 **Phase 10:** Training dataset builder (labels, time/walk-forward splits, JSONL + DB registry)  
 **Phase 11:** Decision Model v1 (logistic ranker baseline/challenger, shadow until promote, gate-bound rank score)  
 **Phase 12:** Decision agent (ENTER/WAIT/HOLD/EXIT/NO_SETUP, grounded explanation, outbox snapshot)  
-**Phase 13:** Vision screenshots (upload validation, market check, Gate D, never trade authority)
+**Phase 13:** Vision screenshots (upload validation, market check, Gate D, never trade authority)  
+**Phase 14:** Scanner (closed-candle pipeline, dedupe keys, kill switches, Celery queues + Redis lock, ops status)
 
 ---
 
@@ -513,6 +514,19 @@ Unreadable prices not fabricated; vision never alone authorizes a trade; low con
 Duplicate candles/jobs do not duplicate alerts; restart recovery safe; stale data produces zero actionable publishes.
 
 **Depends on:** Phases 5–8 (12 recommended before user-facing alerts).
+
+**Landing note (Oct 2026):** `private_trading_agents.scanner` / `scanner_service` implement the
+closed-candle pipeline (freshness → cheap BOS prefilter → full decision workflow). `ScanRun` is
+unique per `(symbol, timeframe, candle_open_time)` so re-scans return the existing run;
+`SignalCandidate` is unique per dedupe key (`strategy:vN:symbol:tf:anchor:signal_type`) and repeats
+only bump `seen_count`. Kill switches live in `system_settings` with Settings fallback; when
+`notifications_enabled` is off candidates are stored as `suppressed_kill_switch` and no outbox event
+is emitted. `apps/worker` ships a Celery app (queues market/ai/notifications/backtests, beat every
+60s) guarded by a Redis `SET NX` lock with DB-uniqueness fallback, plus a broker-less
+`python -m private_trading_worker` loop. Failed runs are recorded as `status=failed` dead letters.
+`GET /v1/scanner/status` exposes queue depths, last success per instrument/TF, dead-letter count,
+and provider health. Live smoke: duplicate runs produced identical run ids and zero new candidates;
+disabled scanner yields `skipped_disabled` for every pair.
 
 ---
 

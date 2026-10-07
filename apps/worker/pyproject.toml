@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Celery worker entrypoint"
 requires-python = ">=3.12"
 dependencies = [
+    "celery>=5.4",
     "private-trading-core",
+    "private-trading-db",
+    "private-trading-agents",
+    "private-trading-market-data",
+    "redis>=5",
 ]
 
 [build-system]
@@ -16,3 +21,6 @@ packages = ["src/private_trading_worker"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }
+private-trading-agents = { workspace = true }
+private-trading-market-data = { workspace = true }
