@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phase 10 landing**  
+**Status:** Active build plan — **Phase 11 landing**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -14,7 +14,8 @@
 **Phase 7:** Strategy DSL + wyckoff-hdm gates + publish/evaluate APIs  
 **Phase 8:** RiskPolicy veto (R:R, invalidation, freshness, paper sizing only)  
 **Phase 9:** Event-driven backtest replay + frozen fixture regression  
-**Phase 10:** Training dataset builder (labels, time/walk-forward splits, JSONL + DB registry)
+**Phase 10:** Training dataset builder (labels, time/walk-forward splits, JSONL + DB registry)  
+**Phase 11:** Decision Model v1 (logistic ranker baseline/challenger, shadow until promote, gate-bound rank score)
 
 ---
 
@@ -438,6 +439,8 @@ Every row traces to raw timestamps, strategy version, and label policy.
 
 **Acceptance gate**  
 Out-of-sample metrics documented; model cannot bypass rules/risk; LLM never invents probability %.
+
+**Landing:** v1 trainer is a deterministic logistic ranker with the registry, abstention bands, and shadow/champion contract. LightGBM/XGBoost stays the intended swap once samples are large enough for a tree model.
 
 **Depends on:** Phase 10.
 
