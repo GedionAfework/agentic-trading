@@ -1,3 +1,18 @@
-"""Agent policies and tool contracts."""
+"""Decision orchestrator — recommendation contract (Phase 12)."""
 
-__version__ = "0.1.0"
+from private_trading_agents.workflow import (
+    WORKFLOW_VERSION,
+    CitationRef,
+    DecisionAction,
+    DecisionSnapshot,
+    run_decision_workflow,
+)
+
+__all__ = [
+    "WORKFLOW_VERSION",
+    "CitationRef",
+    "DecisionAction",
+    "DecisionSnapshot",
+    "run_decision_workflow",
+]
+__version__ = WORKFLOW_VERSION

@@ -13,6 +13,7 @@ dependencies = [
     "private-trading-risk",
     "private-trading-backtest",
     "private-trading-decision",
+    "private-trading-agents",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "python-multipart>=0.0.12",
@@ -38,3 +39,4 @@ private-trading-strategies = { workspace = true }
 private-trading-risk = { workspace = true }
 private-trading-backtest = { workspace = true }
 private-trading-decision = { workspace = true }
+private-trading-agents = { workspace = true }

@@ -37,6 +37,7 @@ from private_trading_db.models.strategy import (
     StrategyVersion,
 )
 from private_trading_db.models.decision_model import DecisionModel
+from private_trading_db.models.decision_record import DecisionRecord
 from private_trading_db.models.training import TrainingDataset, TrainingDatasetVersion
 
 __all__ = [
@@ -75,4 +76,5 @@ __all__ = [
     "TrainingDataset",
     "TrainingDatasetVersion",
     "DecisionModel",
+    "DecisionRecord",
 ]

@@ -35,6 +35,7 @@ name = "agentic-trading"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "private-trading-agents" },
     { name = "private-trading-ai-gateway" },
     { name = "private-trading-api" },
     { name = "private-trading-backtest" },
@@ -62,6 +63,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "private-trading-agents", editable = "packages/agents" },
     { name = "private-trading-ai-gateway", editable = "packages/ai_gateway" },
     { name = "private-trading-api", editable = "apps/api" },
     { name = "private-trading-backtest", editable = "packages/backtest" },
@@ -1152,10 +1154,22 @@ version = "0.1.0"
 source = { editable = "packages/agents" }
 dependencies = [
     { name = "private-trading-core" },
+    { name = "private-trading-db" },
+    { name = "private-trading-decision" },
+    { name = "private-trading-features" },
+    { name = "private-trading-risk" },
+    { name = "private-trading-strategies" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "private-trading-core", editable = "packages/core" }]
+requires-dist = [
+    { name = "private-trading-core", editable = "packages/core" },
+    { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-decision", editable = "packages/decision" },
+    { name = "private-trading-features", editable = "packages/features" },
+    { name = "private-trading-risk", editable = "packages/risk" },
+    { name = "private-trading-strategies", editable = "packages/strategies" },
+]
 
 [[package]]
 name = "private-trading-ai-gateway"
@@ -1182,6 +1196,7 @@ version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
     { name = "fastapi" },
+    { name = "private-trading-agents" },
     { name = "private-trading-ai-gateway" },
     { name = "private-trading-backtest" },
     { name = "private-trading-core" },
@@ -1198,6 +1213,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "private-trading-agents", editable = "packages/agents" },
     { name = "private-trading-ai-gateway", editable = "packages/ai_gateway" },
     { name = "private-trading-backtest", editable = "packages/backtest" },
     { name = "private-trading-core", editable = "packages/core" },
