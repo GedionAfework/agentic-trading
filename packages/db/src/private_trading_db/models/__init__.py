@@ -1,4 +1,10 @@
 from private_trading_db.models.ai import ModelRegistry, PromptVersion
+from private_trading_db.models.analytics import (
+    CalibrationSnapshot,
+    FeedbackReviewItem,
+    PerformanceSnapshot,
+    RetrainRequest,
+)
 from private_trading_db.models.backtest import BacktestDataset, BacktestJob
 from private_trading_db.models.decision_model import DecisionModel
 from private_trading_db.models.decision_record import DecisionRecord
@@ -102,4 +108,8 @@ __all__ = [
     "PaperTrade",
     "PaperTradeEvent",
     "JournalEntry",
+    "PerformanceSnapshot",
+    "FeedbackReviewItem",
+    "CalibrationSnapshot",
+    "RetrainRequest",
 ]

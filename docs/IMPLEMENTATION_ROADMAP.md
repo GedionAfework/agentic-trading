@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phases 0–17 landed; Phase 18 next**  
+**Status:** Active build plan — **Phases 0–18 landed; Phase 19 next**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -22,6 +22,7 @@
 **Phase 15:** Telegram bot (secret-validated webhook, one-time link, commands, alert buttons, outbox → delivery with 429/retry)  
 **Phase 16:** Paper trading (READY→open→close→journal, next-open fills, conservative same-candle, soak/integrity)  
 **Phase 17:** Mobile Expo client (SecureStore auth, setups/ask/paper/journal + SRS screens, `privatetrading://` scheme)
+**Phase 18:** Analytics (performance snapshots, sample-size warnings, similar setups, calibration/drift, retrain governance; Telegram `/performance`; journal narration from SQL only)
 
 ---
 
@@ -635,7 +636,7 @@ Auth uses SecureStore for access/refresh tokens with silent refresh on 401; logi
 `mobile:<model>`. Configurable `EXPO_PUBLIC_API_BASE_URL` (Android emulator defaults to
 `10.0.2.2`). Screens cover SRS Appendix A: Login, Dashboard, Setups list/detail (accept → PAPER
 trade), Ask AI, Vision upload, Knowledge, Strategies (read-only), Backtests, Paper portfolio,
-Journal (paper cohort), Analytics placeholder (Phase 18), Notifications (Telegram status),
+Journal (paper cohort), Analytics (Phase 18 SQL snapshots), Notifications (Telegram status),
 Sessions (revoke), System health. No provider/model/DB secrets in the app. Deep-link scheme
 `privatetrading://` registered for future push payloads. Physical-device EAS builds and push
 credentials are operational follow-ups (not stored in-repo). `npm run typecheck` passes.
@@ -659,6 +660,15 @@ credentials are operational follow-ups (not stored in-repo). `npm run typecheck`
 LLM narrates computed metrics only; backtest/paper/manual cohorts never silently merged.
 
 **Depends on:** Phases 9, 16.
+
+**Landing note (Oct 2026):** Package `private_trading_analytics` + migration `b4d8f0a23c56`.
+Performance snapshots by strategy/symbol/TF/session with sample-size warnings
+(`insufficient` under 10, `small` under 30). Calibration/drift flags are informational only.
+Feedback review queue syncs Telegram dismiss/skip/decision_taken. Retrain requests require
+explicit evaluation (`holdout_metrics` + notes); P&L panic alone is `POLICY_VIOLATION`.
+APIs under `/v1/analytics/*`; Telegram `/performance` and mobile Analytics screen consume
+SQL aggregates; narration rejects invented numbers. Cohorts (`paper` / `backtest`) never merge.
+Unit tests green; live smoke: refresh → narrate → calibration → retrain governance.
 
 ---
 

@@ -208,6 +208,11 @@ class DbBotRepository:
             for r in rows
         ]
 
+    async def performance_summary(self, *, user_id: uuid.UUID) -> dict[str, Any]:
+        from private_trading_analytics.service import performance_summary_for_telegram
+
+        return await performance_summary_for_telegram(self.session, owner_user_id=user_id)
+
     async def analyze_photo(
         self, *, user_id: uuid.UUID, file_id: str, caption: str | None
     ) -> dict[str, Any] | None:

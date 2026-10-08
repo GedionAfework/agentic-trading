@@ -129,6 +129,17 @@ class FakeRepo:
         self.calls.append("list_journal")
         return []
 
+    async def performance_summary(self, *, user_id):
+        self.calls.append("performance_summary")
+        return {
+            "cohort": "paper",
+            "sample_size": 0,
+            "sample_status": "insufficient_sample",
+            "metrics": {},
+            "warnings": ["No closed PAPER trades yet."],
+            "narrative": None,
+        }
+
     async def analyze_photo(self, *, user_id, file_id, caption):
         self.calls.append("analyze_photo")
         return None

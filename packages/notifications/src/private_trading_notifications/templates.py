@@ -23,9 +23,31 @@ UNLINKED_TEXT = (
 LINK_FAILED_TEXT = (
     "Link code is invalid, expired or already used. Generate a new one in the web app."
 )
-NOT_AVAILABLE = {
-    "performance": "Performance analytics arrive with Phase 17 soak / analytics.",
-}
+def performance_summary(payload: dict[str, Any]) -> str:
+    """Render a PAPER cohort snapshot. Numbers come from SQL aggregates only."""
+    n = int(payload.get("sample_size") or 0)
+    status = escape(str(payload.get("sample_status") or "unknown"))
+    metrics = payload.get("metrics") or {}
+    lines = [
+        "<b>PAPER performance</b> (cohort=paper — never mixed with backtest)",
+        f"Sample size: {n} · status: {status}",
+    ]
+    wr = metrics.get("win_rate")
+    mean_r = metrics.get("mean_r")
+    sum_r = metrics.get("sum_r")
+    if wr is not None:
+        lines.append(f"Win rate: {escape(str(wr))} ({int(metrics.get('win_count') or 0)} wins)")
+    if mean_r is not None:
+        lines.append(f"Mean R: {escape(str(mean_r))}")
+    if sum_r is not None:
+        lines.append(f"Sum R: {escape(str(sum_r))}")
+    for warn in payload.get("warnings") or []:
+        lines.append(f"Warning: {escape(str(warn))}")
+    narrative = payload.get("narrative")
+    if narrative:
+        lines.extend(["", escape(str(narrative))])
+    lines.extend(["", FOOTER])
+    return "\n".join(lines)
 
 
 def journal_list(items: list[dict[str, Any]]) -> str:
@@ -223,7 +245,7 @@ def help_text(*, linked: bool) -> str:
             "/strategies — registered strategies",
             "/settings — kill switches",
             "/journal — PAPER closed-trade journal",
-            "/performance — arrives with Phase 17 analytics",
+            "/performance — PAPER cohort SQL aggregates",
             "",
             "Send free text to ask the knowledge base (answers cite approved documents).",
             "Send a chart screenshot (optionally caption <code>SYMBOL TIMEFRAME</code>) for a "

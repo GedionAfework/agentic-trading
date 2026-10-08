@@ -12,6 +12,7 @@ from private_trading_db.session import dispose_engine
 
 from private_trading_api.errors import register_exception_handlers
 from private_trading_api.routes.ai import router as ai_router
+from private_trading_api.routes.analytics import router as analytics_router
 from private_trading_api.routes.auth import router as auth_router
 from private_trading_api.routes.backtests import router as backtests_router
 from private_trading_api.routes.decision import router as decision_router
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(scanner_router, prefix="/v1")
     app.include_router(telegram_router, prefix="/v1")
     app.include_router(paper_router, prefix="/v1")
+    app.include_router(analytics_router, prefix="/v1")
     return app
 
 

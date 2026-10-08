@@ -131,6 +131,41 @@ export type ScannerStatusOut = {
   provider?: Record<string, unknown>;
 };
 
+export type PerformanceSnapshotOut = {
+  id: string;
+  cohort: string;
+  grain: string;
+  strategy_code: string;
+  instrument_symbol: string;
+  timeframe: string;
+  session_bucket: string;
+  sample_size: number;
+  sample_status: string;
+  metrics: {
+    trade_count?: number;
+    win_count?: number;
+    loss_count?: number;
+    win_rate?: number | null;
+    mean_r?: number | null;
+    sum_r?: number | null;
+    [key: string]: unknown;
+  };
+  warnings: string[];
+  computed_at: string;
+};
+
+export type CalibrationSnapshotOut = {
+  id: string;
+  cohort: string;
+  band_field: string;
+  sample_size: number;
+  sample_status: string;
+  bands: Record<string, unknown>;
+  drift_flags: string[];
+  warnings: string[];
+  computed_at: string;
+};
+
 export type ApiErrorBody = {
   error?: {
     code?: string;

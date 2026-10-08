@@ -128,6 +128,27 @@ export const api = {
       body: { decision_record_id },
     }),
   journal: () => apiRequest<import("./types").JournalEntryOut[]>("/paper/journal"),
+  performance: (cohort = "paper", grain = "overall") =>
+    apiRequest<import("./types").PerformanceSnapshotOut[]>(
+      `/analytics/performance?cohort=${encodeURIComponent(cohort)}&grain=${encodeURIComponent(grain)}`,
+    ),
+  refreshPerformance: (cohort = "paper") =>
+    apiRequest<import("./types").PerformanceSnapshotOut[]>("/analytics/performance/refresh", {
+      method: "POST",
+      body: { cohort },
+    }),
+  narratePerformance: (snapshotId: string) =>
+    apiRequest<{ snapshot_id: string; cohort: string; narrative: string }>(
+      `/analytics/performance/${snapshotId}/narrate`,
+      { method: "POST", body: {} },
+    ),
+  calibration: () =>
+    apiRequest<import("./types").CalibrationSnapshotOut[]>("/analytics/calibration"),
+  refreshCalibration: () =>
+    apiRequest<import("./types").CalibrationSnapshotOut>("/analytics/calibration/refresh", {
+      method: "POST",
+      body: {},
+    }),
   backtests: () => apiRequest<Array<Record<string, unknown>>>("/backtests/jobs"),
   telegramStatus: () => apiRequest<Record<string, unknown>>("/telegram/status"),
   uploadScreenshot: async (uri: string, name: string, type: string, caption?: string) => {

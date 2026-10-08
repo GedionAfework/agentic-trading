@@ -85,6 +85,8 @@ class BotRepository(Protocol):
 
     async def list_journal(self, *, user_id: uuid.UUID, limit: int) -> list[dict[str, Any]]: ...
 
+    async def performance_summary(self, *, user_id: uuid.UUID) -> dict[str, Any]: ...
+
 
 def _parse_command(text: str) -> tuple[str, list[str]] | None:
     stripped = text.strip()
@@ -220,9 +222,10 @@ async def _handle_command(
         result.handled = "journal"
         result.replies.append(BotReply(chat_id=chat_id, text=templates.journal_list(items)))
     elif name == "/performance":
-        result.handled = "performance_not_available"
+        summary = await repo.performance_summary(user_id=account.user_id)
+        result.handled = "performance"
         result.replies.append(
-            BotReply(chat_id=chat_id, text=templates.NOT_AVAILABLE["performance"])
+            BotReply(chat_id=chat_id, text=templates.performance_summary(summary))
         )
     elif name == "/settings":
         await _handle_settings(args, account, result, repo)
