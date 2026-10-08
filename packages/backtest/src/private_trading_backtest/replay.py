@@ -99,6 +99,7 @@ def run_replay(
     signals_seen = 0
     pending_entry: dict[str, Any] | None = None
     open_trade: dict[str, Any] | None = None
+    seen_setup_anchors: set[str] = set()
     trade_id = 0
 
     for i, bar in enumerate(bars):
@@ -212,6 +213,9 @@ def run_replay(
         )
         if assessment.setup_state != SetupState.READY_FOR_REVIEW:
             continue
+        setup_anchor = ctx.get("_setup_anchor")
+        if setup_anchor and setup_anchor in seen_setup_anchors:
+            continue
         signals_seen += 1
 
         stop_s = ctx.get("_stop_price")
@@ -247,6 +251,8 @@ def run_replay(
             continue
 
         # Schedule fill at next bar open — never current close (no look-ahead)
+        if setup_anchor:
+            seen_setup_anchors.add(str(setup_anchor))
         pending_entry = {
             "direction": direction.value,
             "signal_bar_index": i,

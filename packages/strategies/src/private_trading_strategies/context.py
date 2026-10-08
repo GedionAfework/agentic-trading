@@ -34,12 +34,14 @@ def build_playbook_context(
 
     if direction == Direction.LONG:
         stop = swing_low.value if swing_low.status == TriState.TRUE else None
+        setup_anchor = swing_high.value if swing_high.status == TriState.TRUE else None
         if stop is None and atr.status == TriState.TRUE and atr.value:
             stop = close - Decimal(str(atr.value))
         structural_ok = stop is not None and stop < close
         risk = (close - stop) if stop is not None else None
     else:
         stop = swing_high.value if swing_high.status == TriState.TRUE else None
+        setup_anchor = swing_low.value if swing_low.status == TriState.TRUE else None
         if stop is None and atr.status == TriState.TRUE and atr.value:
             stop = close + Decimal(str(atr.value))
         structural_ok = stop is not None and stop > close
@@ -59,4 +61,9 @@ def build_playbook_context(
         "retest_complete": retest_complete,
         "_stop_price": str(stop) if stop is not None else None,
         "_entry_ref": str(close),
+        "_setup_anchor": (
+            f"{direction.value}:{Decimal(str(setup_anchor)).normalize():f}"
+            if setup_anchor is not None
+            else None
+        ),
     }

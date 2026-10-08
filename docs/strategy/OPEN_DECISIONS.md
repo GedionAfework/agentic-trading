@@ -12,7 +12,7 @@
 | D-08 | Futures/perp recommendations | Spot-only v1 vs later perps + leverage cap | Propose spot-first | No |
 | D-09 | Target policy | Structure TPs vs opposite-MSB vs R-multiples | | No |
 | D-10 | Public research authority | Stay Tier 5 unless promoted | Propose Tier 5 only | No |
-| D-11 | Aggressive entry allowed in v1 alerts? | Yes with tighter risk / No safer-only | Safer retest lost money on daily (−0.42R). v1 default is **aggressive BOS+volume, longs only, EMA50 HTF**. Safer kept as optional path | No |
+| D-11 | Aggressive entry allowed in v1 alerts? | Yes with tighter risk / No safer-only | Broad candidate failed. SOL-only walk-forward challenger: +0.215R, 40.9% WR, 164 trades; paper-only due symbol-selection bias. Live alerts remain blocked | No |
 | D-12 | First alert channels | Telegram only vs Telegram+mobile | Telegram only (Phase 20 default) | Yes |
 
 Update this table as decisions lock. Do not hide defaults inside code without a row here.

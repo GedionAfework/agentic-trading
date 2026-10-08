@@ -55,8 +55,19 @@ def last_swing(
     kind: str,
     radius: int = SWING_RADIUS,
 ) -> SwingPoint | None:
-    swings = [s for s in confirmed_swings(bars, as_of_index=as_of_index, radius=radius) if s.kind == kind]
-    return swings[-1] if swings else None
+    if as_of_index < 0 or as_of_index >= len(bars) or kind not in {"high", "low"}:
+        return None
+    # Walk backward and stop on the first confirmed pivot. Building every
+    # historical swing on every replay bar made long 1h runs quadratic.
+    for j in range(as_of_index - radius, radius - 1, -1):
+        window = bars[j - radius : j + radius + 1]
+        mid = bars[j]
+        values = [b.high for b in window] if kind == "high" else [b.low for b in window]
+        price = mid.high if kind == "high" else mid.low
+        extreme = max(values) if kind == "high" else min(values)
+        if price == extreme and values.count(price) == 1:
+            return SwingPoint(j, mid.open_time, price, kind)
+    return None
 
 
 def compute_last_swing_high(bars: list[CandleBar], index: int) -> FeatureValue:

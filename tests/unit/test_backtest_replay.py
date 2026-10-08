@@ -1,6 +1,10 @@
+from decimal import Decimal
+
+from private_trading_backtest.costs import apply_entry_price, apply_exit_price, cost_amount
 from private_trading_backtest.fingerprint import dataset_fingerprint
 from private_trading_backtest.fixtures import FIXTURE_SYMBOL, FIXTURE_TIMEFRAME, frozen_bos_long_fixture
 from private_trading_backtest.replay import run_replay
+from private_trading_backtest.types import CostModel
 from private_trading_features.engine import compute_feature
 
 
@@ -10,6 +14,20 @@ def test_fingerprint_stable() -> None:
     b = dataset_fingerprint(bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME)
     assert a == b
     assert len(a) == 64
+
+
+def test_cost_model_does_not_charge_fees_twice() -> None:
+    costs = CostModel(
+        fee_bps=Decimal("10"),
+        slippage_bps=Decimal("5"),
+        spread_bps=Decimal("2"),
+    )
+    raw = Decimal("100")
+    entry = apply_entry_price(raw, direction="long", costs=costs)
+    exit_ = apply_exit_price(raw, direction="long", costs=costs)
+    cash_fees = cost_amount(raw, costs=costs, legs=2)
+    total_cost = (entry - raw) + (raw - exit_) + cash_fees
+    assert total_cost == raw * costs.round_trip_bps / Decimal("10000")
 
 
 def test_no_lookahead_fill_is_next_open() -> None:
