@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phases 0–16 landed; Phase 17 next**  
+**Status:** Active build plan — **Phases 0–17 landed; Phase 18 next**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -20,7 +20,8 @@
 **Phase 13:** Vision screenshots (upload validation, market check, Gate D, never trade authority)  
 **Phase 14:** Scanner (closed-candle pipeline, dedupe keys, kill switches, Celery queues + Redis lock, ops status)  
 **Phase 15:** Telegram bot (secret-validated webhook, one-time link, commands, alert buttons, outbox → delivery with 429/retry)  
-**Phase 16:** Paper trading (READY→open→close→journal, next-open fills, conservative same-candle, soak/integrity)
+**Phase 16:** Paper trading (READY→open→close→journal, next-open fills, conservative same-candle, soak/integrity)  
+**Phase 17:** Mobile Expo client (SecureStore auth, setups/ask/paper/journal + SRS screens, `privatetrading://` scheme)
 
 ---
 
@@ -628,6 +629,16 @@ Login/MFA, Dashboard, Setup list/detail, Ask AI, Screenshot analysis, Knowledge 
 Critical flows on physical devices; push + deep link; auth revoke works.
 
 **Depends on:** API surfaces from Phases 2–16 (can start UI against mocks earlier).
+
+**Landing note (Oct 2026):** Expo app lives in `apps/mobile` (SDK 57, expo-router, React Query).
+Auth uses SecureStore for access/refresh tokens with silent refresh on 401; login device name is
+`mobile:<model>`. Configurable `EXPO_PUBLIC_API_BASE_URL` (Android emulator defaults to
+`10.0.2.2`). Screens cover SRS Appendix A: Login, Dashboard, Setups list/detail (accept → PAPER
+trade), Ask AI, Vision upload, Knowledge, Strategies (read-only), Backtests, Paper portfolio,
+Journal (paper cohort), Analytics placeholder (Phase 18), Notifications (Telegram status),
+Sessions (revoke), System health. No provider/model/DB secrets in the app. Deep-link scheme
+`privatetrading://` registered for future push payloads. Physical-device EAS builds and push
+credentials are operational follow-ups (not stored in-repo). `npm run typecheck` passes.
 
 ---
 

@@ -38,7 +38,7 @@ uv run ruff check .
 ## Repository layout
 
 ```
-apps/           # api, worker, telegram entrypoints
+apps/           # api, worker, telegram, mobile (Expo) entrypoints
 packages/       # domain libraries (core, db, market_data, strategies, ...)
 infra/docker/   # Compose stack
 docs/           # roadmap + Phase 0 strategy specs
@@ -46,6 +46,19 @@ migrations/     # Alembic (Phase 2)
 tests/          # unit / integration / ...
 resources/      # local course dumps (gitignored under incoming/)
 ```
+
+## Mobile (Phase 17)
+
+```bash
+# API reachable from the device/emulator (bind all interfaces for physical devices)
+uv run uvicorn private_trading_api.main:app --app-dir apps/api/src --host 0.0.0.0 --port 8000
+
+cd apps/mobile
+cp .env.example .env
+npm start
+```
+
+See [`apps/mobile/README.md`](apps/mobile/README.md). Tokens use SecureStore; never put bot/DB/Ollama secrets in the app.
 
 ## Auth bootstrap (Phase 2)
 

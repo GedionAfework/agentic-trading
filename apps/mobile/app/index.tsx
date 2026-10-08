@@ -1,0 +1,10 @@
+import { Redirect } from "expo-router";
+import { useAuth } from "../src/auth/AuthContext";
+import { Loading } from "../src/components/ui";
+
+export default function Index() {
+  const { ready, user } = useAuth();
+  if (!ready) return <Loading />;
+  if (!user) return <Redirect href="/login" />;
+  return <Redirect href="/(app)" />;
+}

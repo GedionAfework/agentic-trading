@@ -32,6 +32,17 @@ Thumbs.db
 # Local object storage / uploads
 data/
 
+# Mobile (Expo)
+apps/mobile/node_modules/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/dist-smoke/
+apps/mobile/.env
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+
 # Temp extraction
 tmp/
 notebooks/.ipynb_checkpoints/
