@@ -7,6 +7,7 @@ from private_trading_backtest.costs import apply_entry_price, apply_exit_price, 
 from private_trading_backtest.types import CostModel
 from private_trading_features.engine import compute_feature, get_feature
 from private_trading_features.types import CandleBar, TriState
+from private_trading_strategies.context import DEFAULT_ENTRY_PATH, build_playbook_context
 from private_trading_strategies.evaluate import evaluate_strategy
 from private_trading_strategies.types import Direction, SetupState
 from private_trading_strategies.wyckoff_hdm import build_wyckoff_hdm_v1
@@ -23,6 +24,10 @@ FEATURE_NAMES = (
     "atr",
     "volume_ratio",
     "range_vs_atr",
+    "ema_50",
+    "ema_htf_bias",
+    "retest_long",
+    "retest_short",
 )
 
 
@@ -156,19 +161,14 @@ def label_bar(
 
     min_rr = Decimal(policy.min_rr)
     stop, target, entry_ref = _stop_target(bars, index, direction=direction, min_rr=min_rr)
-    structural_ok = stop is not None and target is not None
-    ctx = {
-        "htf_bias": direction.value,
-        "structural_stop_ok": structural_ok,
-        "rr_to_tp1": float(min_rr) if structural_ok else None,
-        "entry_path": "aggressive",
-        "retest_complete": False,
-    }
+    ctx = build_playbook_context(
+        bars, index, direction=direction, min_rr=min_rr, entry_path=DEFAULT_ENTRY_PATH
+    )
     assessment = evaluate_strategy(
         strategy,
         direction=direction,
         features=features,
-        context=ctx,
+        context={k: v for k, v in ctx.items() if not k.startswith("_")},
     )
 
     costs = CostModel(

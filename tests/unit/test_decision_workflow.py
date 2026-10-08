@@ -1,6 +1,8 @@
 from private_trading_agents.explain import explanation_invents_numbers, grounded_explanation
 from private_trading_agents.workflow import CitationRef, DecisionAction, run_decision_workflow
 from private_trading_backtest.fixtures import (
+    FIXTURE_BOS_INDEX,
+    FIXTURE_RETEST_INDEX,
     FIXTURE_SYMBOL,
     FIXTURE_TIMEFRAME,
     frozen_bos_long_fixture,
@@ -32,7 +34,7 @@ def test_no_setup_is_first_class() -> None:
 
 
 def test_stale_data_waits_and_cites_blocker() -> None:
-    snapshot = _run(bar_index=35, data_fresh=False)
+    snapshot = _run(bar_index=FIXTURE_RETEST_INDEX, data_fresh=False)
     assert snapshot.action == DecisionAction.WAIT
     assert "stale_market_data" in snapshot.hard_blockers
     assert "stale_market_data" in snapshot.explanation
@@ -75,6 +77,7 @@ def test_citation_is_named_and_invented_numbers_are_rejected() -> None:
         "rr_ratio": snapshot.rr_ratio,
         "model_score": snapshot.model_score,
         "extra_numbers": ["2.0"],
+        "features": (snapshot.evidence or {}).get("features") or {},
     }
     assert explanation_invents_numbers(snapshot.explanation, facts) == []
     assert explanation_invents_numbers("Target is 99999.", facts) == ["99999"]
@@ -83,7 +86,7 @@ def test_citation_is_named_and_invented_numbers_are_rejected() -> None:
 def test_ready_bar_enters_and_open_position_holds() -> None:
     bars = _bars()
     entered = run_decision_workflow(
-        bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME, bar_index=35
+        bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME, bar_index=FIXTURE_BOS_INDEX
     )
     assert entered.action == DecisionAction.ENTER
     assert entered.risk_approved is True
@@ -94,7 +97,7 @@ def test_ready_bar_enters_and_open_position_holds() -> None:
         bars,
         symbol=FIXTURE_SYMBOL,
         timeframe=FIXTURE_TIMEFRAME,
-        bar_index=35,
+        bar_index=FIXTURE_RETEST_INDEX,
         position_state="open",
     )
     assert held.action == DecisionAction.HOLD

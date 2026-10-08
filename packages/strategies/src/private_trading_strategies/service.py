@@ -226,6 +226,8 @@ async def _seed_golden_cases(session: AsyncSession, version: StrategyVersion) ->
                 "bos_bearish": {"status": "false", "value": False},
                 "significant_volume": {"status": "true", "value": True},
                 "low_volume": {"status": "true", "value": True},
+                "retest_long": {"status": "false", "value": False},
+                "retest_short": {"status": "false", "value": False},
             },
             input_context={
                 "htf_bias": "long",
@@ -246,6 +248,8 @@ async def _seed_golden_cases(session: AsyncSession, version: StrategyVersion) ->
                 "bos_bullish": {"status": "false", "value": False},
                 "bos_bearish": {"status": "false", "value": False},
                 "significant_volume": {"status": "true", "value": True},
+                "retest_long": {"status": "false", "value": False},
+                "retest_short": {"status": "false", "value": False},
             },
             input_context={
                 "htf_bias": "long",
@@ -264,6 +268,8 @@ async def _seed_golden_cases(session: AsyncSession, version: StrategyVersion) ->
             input_features={
                 "bos_bullish": {"status": "true", "value": True},
                 "significant_volume": {"status": "true", "value": True},
+                "retest_long": {"status": "false", "value": False},
+                "retest_short": {"status": "false", "value": False},
             },
             input_context={
                 "htf_bias": "long",

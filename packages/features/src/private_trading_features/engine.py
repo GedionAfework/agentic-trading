@@ -5,6 +5,8 @@ import json
 from datetime import datetime
 
 from private_trading_features import atr as _atr  # noqa: F401
+from private_trading_features import ema as _ema  # noqa: F401
+from private_trading_features import retest as _retest  # noqa: F401
 from private_trading_features import session as _session  # noqa: F401
 from private_trading_features import structure as _structure  # noqa: F401
 from private_trading_features import swings as _swings  # noqa: F401
@@ -12,7 +14,7 @@ from private_trading_features import volume as _volume  # noqa: F401
 from private_trading_features.registry import FEATURE_REGISTRY, get_feature, list_features
 from private_trading_features.types import CandleBar, FeatureSnapshot, FeatureValue, TriState
 
-FEATURE_ENGINE_VERSION = "0.1.0"
+FEATURE_ENGINE_VERSION = "0.2.0"
 
 
 def assert_no_lookahead(bars: list[CandleBar], index: int) -> None:
@@ -46,9 +48,8 @@ def compute_feature(name: str, bars: list[CandleBar], index: int) -> FeatureValu
     spec = get_feature(name)
     if spec.compute is None:
         return FeatureValue.unknown(name, spec.version, "no_compute_fn")
-    # Pass only bars up to index inclusive — hard no look-ahead boundary.
-    window = bars[: index + 1]
-    return spec.compute(window, index)
+    # Features must read only bars[0..index]. Avoid copying the window (1h replay).
+    return spec.compute(bars, index)
 
 
 def compute_many(

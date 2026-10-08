@@ -22,6 +22,8 @@ def allowed_numbers(facts: dict[str, Any]) -> set[str]:
             allowed.add(text.rstrip("0").rstrip(".") if "." in text else text)
     for token in facts.get("extra_numbers") or []:
         allowed.add(str(token))
+    for name in facts.get("features") or {}:
+        allowed.update(_NUMBER.findall(str(name)))
     return allowed
 
 

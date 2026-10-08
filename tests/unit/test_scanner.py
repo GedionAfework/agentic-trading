@@ -8,6 +8,9 @@ from private_trading_agents.scanner import (
     setup_anchor,
 )
 from private_trading_backtest.fixtures import (
+    FIXTURE_BOS_INDEX,
+    FIXTURE_PAD,
+    FIXTURE_RETEST_INDEX,
     FIXTURE_SYMBOL,
     FIXTURE_TIMEFRAME,
     frozen_bos_long_fixture,
@@ -21,7 +24,7 @@ def _bars_to(index: int) -> list[CandleBar]:
 
 def test_stale_data_never_publishes_even_on_bos_candle() -> None:
     outcome = evaluate_closed_candle(
-        _bars_to(35),
+        _bars_to(FIXTURE_RETEST_INDEX),
         symbol=FIXTURE_SYMBOL,
         timeframe=FIXTURE_TIMEFRAME,
         fresh=False,
@@ -34,7 +37,7 @@ def test_stale_data_never_publishes_even_on_bos_candle() -> None:
 
 
 def test_prefilter_skips_full_pipeline_on_quiet_candle() -> None:
-    bars = _bars_to(27)
+    bars = _bars_to(FIXTURE_PAD - 1)
     assert prefilter_passes(bars, len(bars) - 1) is False
     outcome = evaluate_closed_candle(
         bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME, fresh=True, actionable=True
@@ -45,7 +48,7 @@ def test_prefilter_skips_full_pipeline_on_quiet_candle() -> None:
 
 
 def test_bos_candle_produces_candidate_with_stable_dedupe_key() -> None:
-    bars = _bars_to(35)
+    bars = _bars_to(FIXTURE_BOS_INDEX)
     first = evaluate_closed_candle(
         bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME, fresh=True, actionable=True
     )
@@ -73,7 +76,7 @@ def test_dedupe_key_components() -> None:
 
 
 def test_setup_anchor_falls_back_to_bar_time() -> None:
-    bars = _bars_to(35)
+    bars = _bars_to(FIXTURE_BOS_INDEX)
     outcome = evaluate_closed_candle(
         bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME, fresh=True, actionable=True
     )

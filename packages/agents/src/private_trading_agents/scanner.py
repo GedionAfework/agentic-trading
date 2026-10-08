@@ -9,8 +9,8 @@ from private_trading_features.types import CandleBar, TriState
 
 from private_trading_agents.workflow import DecisionAction, DecisionSnapshot, run_decision_workflow
 
-SCANNER_VERSION = "0.1.0"
-MIN_BARS = 25
+SCANNER_VERSION = "0.2.0"
+MIN_BARS = 50
 
 
 @dataclass(slots=True)
@@ -55,9 +55,10 @@ def setup_anchor(snapshot: DecisionSnapshot) -> str:
 
 
 def prefilter_passes(bars: list[CandleBar], index: int, *, direction: str = "long") -> bool:
-    """Cheap deterministic prefilter so the full pipeline only runs on BOS candles."""
-    name = "bos_bullish" if direction == "long" else "bos_bearish"
-    return compute_feature(name, bars, index).status == TriState.TRUE
+    """Full pipeline only on BOS candles (v1 enters the impulse + volume bar)."""
+    if direction != "long":
+        return False
+    return compute_feature("bos_bullish", bars, index).status == TriState.TRUE
 
 
 def evaluate_closed_candle(

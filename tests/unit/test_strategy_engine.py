@@ -14,6 +14,8 @@ def _ready_features() -> dict:
         "bos_bearish": {"status": "false", "value": False},
         "significant_volume": {"status": "true", "value": True},
         "low_volume": {"status": "true", "value": True},
+        "retest_long": {"status": "false", "value": False},
+        "retest_short": {"status": "false", "value": False},
     }
 
 

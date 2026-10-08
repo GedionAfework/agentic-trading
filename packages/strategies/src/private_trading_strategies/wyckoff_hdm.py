@@ -4,6 +4,33 @@ from private_trading_strategies.evaluate import RuleDef, StrategyDefinition, STR
 
 MIN_RR = 2.0
 
+_BOS_OR_RETEST = {
+    "op": "any",
+    "args": [
+        {
+            "op": "switch_direction",
+            "long": {"op": "feature_status", "feature": "bos_bullish", "equals": "true"},
+            "short": {"op": "feature_status", "feature": "bos_bearish", "equals": "true"},
+        },
+        {
+            "op": "switch_direction",
+            "long": {"op": "feature_status", "feature": "retest_long", "equals": "true"},
+            "short": {"op": "feature_status", "feature": "retest_short", "equals": "true"},
+        },
+    ],
+}
+_VOLUME_ON_BOS_OR_RETEST = {
+    "op": "any",
+    "args": [
+        {"op": "feature_bool", "feature": "significant_volume", "equals": True},
+        {
+            "op": "switch_direction",
+            "long": {"op": "feature_status", "feature": "retest_long", "equals": "true"},
+            "short": {"op": "feature_status", "feature": "retest_short", "equals": "true"},
+        },
+    ],
+}
+
 
 def build_wyckoff_hdm_v1(
     *,
@@ -28,13 +55,9 @@ def build_wyckoff_hdm_v1(
         ),
         RuleDef(
             code="bos_confirmed",
-            name="BOS confirmed in trade direction",
+            name="BOS confirmed in trade direction (impulse bar or later retest)",
             rule_type="composite",
-            expression={
-                "op": "switch_direction",
-                "long": {"op": "feature_status", "feature": "bos_bullish", "equals": "true"},
-                "short": {"op": "feature_status", "feature": "bos_bearish", "equals": "true"},
-            },
+            expression=_BOS_OR_RETEST,
             required=True,
             weight=2,
             sort_order=20,
@@ -42,9 +65,9 @@ def build_wyckoff_hdm_v1(
         ),
         RuleDef(
             code="volume_harmony",
-            name="Significant volume supports BOS (VOL-001 EC proxy)",
-            rule_type="comparison",
-            expression={"op": "feature_bool", "feature": "significant_volume", "equals": True},
+            name="BOS printed significant volume, or this bar is the low-volume retest",
+            rule_type="composite",
+            expression=_VOLUME_ON_BOS_OR_RETEST,
             required=True,
             weight=1.5,
             sort_order=30,
@@ -72,26 +95,11 @@ def build_wyckoff_hdm_v1(
         ),
         RuleDef(
             code="q_bos_volume",
-            name="Q1: Confirmed BOS + significant volume",
+            name="Q1: Confirmed BOS + significant volume (or valid retest of that BOS)",
             rule_type="composite",
             expression={
                 "op": "all",
-                "args": [
-                    {
-                        "op": "switch_direction",
-                        "long": {
-                            "op": "feature_status",
-                            "feature": "bos_bullish",
-                            "equals": "true",
-                        },
-                        "short": {
-                            "op": "feature_status",
-                            "feature": "bos_bearish",
-                            "equals": "true",
-                        },
-                    },
-                    {"op": "feature_bool", "feature": "significant_volume", "equals": True},
-                ],
+                "args": [_BOS_OR_RETEST, _VOLUME_ON_BOS_OR_RETEST],
             },
             required=True,
             weight=1,
@@ -101,8 +109,8 @@ def build_wyckoff_hdm_v1(
         RuleDef(
             code="q_volume_harmony",
             name="Q2: Harmonious volume",
-            rule_type="comparison",
-            expression={"op": "feature_bool", "feature": "significant_volume", "equals": True},
+            rule_type="composite",
+            expression=_VOLUME_ON_BOS_OR_RETEST,
             required=True,
             weight=1,
             sort_order=70,

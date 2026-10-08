@@ -6,20 +6,21 @@ from decimal import Decimal
 from private_trading_features.types import CandleBar
 
 
-def frozen_bos_long_fixture() -> list[CandleBar]:
-    """Deterministic synthetic series with a confirmable swing high then bullish BOS.
+FIXTURE_PAD = 50
+FIXTURE_BOS_INDEX = FIXTURE_PAD + 10
+FIXTURE_RETEST_INDEX = FIXTURE_PAD + 12
 
-    Used for regression — fingerprint must remain stable.
+
+def frozen_bos_long_fixture() -> list[CandleBar]:
+    """Swing high → BOS with volume → low-volume retest of the broken level.
+
+    Pad is long enough for EMA50. Safer-entry playbook fires on the retest bar.
     """
     base = datetime(2024, 1, 1, tzinfo=UTC)
-    # Pad with enough bars for ATR(14) and volume SMA(20)
     raw: list[tuple[str, str, str, str, str]] = []
-    for i in range(25):
-        # quiet base
+    for _i in range(FIXTURE_PAD):
         raw.append(("100", "101", "99", "100", "100"))
 
-    # Build swing high around index 29 (after pad 0..24)
-    # indices 25-35 crafted like Phase 6 golden series
     crafted = [
         ("100", "105", "99", "102", "100"),
         ("102", "108", "101", "106", "100"),
@@ -32,11 +33,10 @@ def frozen_bos_long_fixture() -> list[CandleBar]:
         ("102", "104", "98", "100", "80"),
         ("100", "103", "97", "101", "85"),
         ("101", "125", "100", "124", "250"),  # BOS close 124 > 120 + significant volume
-        # follow-through for entry next open / exit paths
-        ("124", "126", "123", "125", "120"),
-        ("125", "128", "118", "119", "110"),  # dips toward stop zone
-        ("119", "130", "118", "129", "140"),  # push to target area
-        ("129", "132", "128", "131", "100"),
+        ("124", "126", "123", "125", "80"),
+        ("125", "125", "119", "120.5", "40"),  # low-volume retest of 120
+        ("120.5", "128", "120", "126", "90"),
+        ("126", "132", "125", "131", "100"),
     ]
     raw.extend(crafted)
 

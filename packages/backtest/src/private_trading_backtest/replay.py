@@ -4,11 +4,12 @@ from decimal import Decimal
 from typing import Any
 
 from private_trading_features.engine import FEATURE_ENGINE_VERSION, compute_feature
-from private_trading_features.types import CandleBar, TriState
+from private_trading_features.types import CandleBar
 from private_trading_risk.assess import assess_risk
 from private_trading_risk.policy import RISK_ENGINE_VERSION, default_policy_config
 from private_trading_risk.types import Direction as RiskDirection
 from private_trading_risk.types import InstrumentRiskMeta, RiskInput
+from private_trading_strategies.context import DEFAULT_ENTRY_PATH, build_playbook_context
 from private_trading_strategies.evaluate import STRATEGY_ENGINE_VERSION, evaluate_strategy
 from private_trading_strategies.types import Direction, SetupState
 from private_trading_strategies.wyckoff_hdm import build_wyckoff_hdm_v1
@@ -25,7 +26,7 @@ from private_trading_backtest.types import (
 
 BACKTEST_ENGINE_VERSION = "0.1.0"
 
-_FEATURE_NAMES = (
+_FEATURE_NAMES_LONG = (
     "bos_bullish",
     "bos_bearish",
     "significant_volume",
@@ -33,6 +34,7 @@ _FEATURE_NAMES = (
     "last_swing_high",
     "last_swing_low",
     "atr",
+    "ema_htf_bias",
 )
 
 
@@ -42,47 +44,6 @@ def _fv_payload(bars: list[CandleBar], index: int, name: str) -> dict[str, Any]:
         "status": fv.status.value,
         "value": float(fv.value) if isinstance(fv.value, Decimal) else fv.value,
         "reason": fv.reason,
-    }
-
-
-def _context_from_features(
-    bars: list[CandleBar],
-    index: int,
-    *,
-    direction: Direction,
-    min_rr: Decimal,
-) -> dict[str, Any]:
-    close = bars[index].close
-    swing_low = compute_feature("last_swing_low", bars, index)
-    swing_high = compute_feature("last_swing_high", bars, index)
-    atr = compute_feature("atr", bars, index)
-
-    if direction == Direction.LONG:
-        stop = swing_low.value if swing_low.status == TriState.TRUE else None
-        if stop is None and atr.status == TriState.TRUE and atr.value:
-            stop = close - Decimal(str(atr.value))
-        structural_ok = stop is not None and stop < close
-        risk = (close - stop) if stop is not None else None
-    else:
-        stop = swing_high.value if swing_high.status == TriState.TRUE else None
-        if stop is None and atr.status == TriState.TRUE and atr.value:
-            stop = close + Decimal(str(atr.value))
-        structural_ok = stop is not None and stop > close
-        risk = (stop - close) if stop is not None else None
-
-    rr = None
-    if risk is not None and risk > 0:
-        # Assume target placed at min_rr for gate check (risk engine also enforces)
-        rr = float(min_rr)
-
-    return {
-        "htf_bias": direction.value,
-        "structural_stop_ok": bool(structural_ok),
-        "rr_to_tp1": rr,
-        "entry_path": "aggressive",
-        "retest_complete": False,
-        "_stop_price": str(stop) if stop is not None else None,
-        "_entry_ref": str(close),
     }
 
 
@@ -107,7 +68,8 @@ def run_replay(
         "direction": "long",
         "account_equity": "10000",
         "qty": "1",
-        "max_bars_in_trade": 20,
+        "max_bars_in_trade": 40,
+        "entry_path": DEFAULT_ENTRY_PATH,
     }
     if config:
         cfg.update(config)
@@ -231,8 +193,17 @@ def run_replay(
             # Cannot schedule next_open fill
             continue
 
-        features = {name: _fv_payload(bars, i, name) for name in _FEATURE_NAMES}
-        ctx = _context_from_features(bars, i, direction=direction, min_rr=min_rr)
+        names = list(_FEATURE_NAMES_LONG)
+        if str(cfg["entry_path"]) == "safer":
+            names.extend(("retest_long", "retest_short"))
+        features = {name: _fv_payload(bars, i, name) for name in names}
+        ctx = build_playbook_context(
+            bars,
+            i,
+            direction=direction,
+            min_rr=min_rr,
+            entry_path=str(cfg["entry_path"]),
+        )
         assessment = evaluate_strategy(
             strategy,
             direction=direction,

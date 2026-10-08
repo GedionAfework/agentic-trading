@@ -19,6 +19,18 @@ DEFAULT_SYMBOLS: tuple[InstrumentInfo, ...] = (
     InstrumentInfo("ETH/USDT", "crypto", "ETH", "USDT", "ETHUSDT"),
     InstrumentInfo("BNB/USDT", "crypto", "BNB", "USDT", "BNBUSDT"),
     InstrumentInfo("SOL/USDT", "crypto", "SOL", "USDT", "SOLUSDT"),
+    InstrumentInfo("XRP/USDT", "crypto", "XRP", "USDT", "XRPUSDT"),
+    InstrumentInfo("ADA/USDT", "crypto", "ADA", "USDT", "ADAUSDT"),
+    InstrumentInfo("DOGE/USDT", "crypto", "DOGE", "USDT", "DOGEUSDT"),
+    InstrumentInfo("LTC/USDT", "crypto", "LTC", "USDT", "LTCUSDT"),
+    InstrumentInfo("LINK/USDT", "crypto", "LINK", "USDT", "LINKUSDT"),
+    InstrumentInfo("AVAX/USDT", "crypto", "AVAX", "USDT", "AVAXUSDT"),
+    InstrumentInfo("DOT/USDT", "crypto", "DOT", "USDT", "DOTUSDT"),
+    InstrumentInfo("ATOM/USDT", "crypto", "ATOM", "USDT", "ATOMUSDT"),
+    InstrumentInfo("NEAR/USDT", "crypto", "NEAR", "USDT", "NEARUSDT"),
+    InstrumentInfo("UNI/USDT", "crypto", "UNI", "USDT", "UNIUSDT"),
+    InstrumentInfo("TRX/USDT", "crypto", "TRX", "USDT", "TRXUSDT"),
+    InstrumentInfo("FIL/USDT", "crypto", "FIL", "USDT", "FILUSDT"),
 )
 
 _INTERVAL_MAP = {tf: tf for tf in SUPPORTED_TIMEFRAMES}

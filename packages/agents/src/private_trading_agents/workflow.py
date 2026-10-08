@@ -10,11 +10,12 @@ from uuid import UUID
 from private_trading_decision.labels import FEATURE_NAMES
 from private_trading_decision.predict import LoadedModel
 from private_trading_features.engine import compute_feature
-from private_trading_features.types import CandleBar, TriState
+from private_trading_features.types import CandleBar
 from private_trading_risk.assess import assess_risk
 from private_trading_risk.policy import default_policy_config
 from private_trading_risk.types import Direction as RiskDirection
 from private_trading_risk.types import InstrumentRiskMeta, RiskInput
+from private_trading_strategies.context import DEFAULT_ENTRY_PATH, build_playbook_context
 from private_trading_strategies.evaluate import evaluate_strategy
 from private_trading_strategies.types import Direction, SetupState
 from private_trading_strategies.wyckoff_hdm import build_wyckoff_hdm_v1
@@ -77,30 +78,6 @@ def _feature_payload(bars: list[CandleBar], index: int) -> dict[str, Any]:
     return payload
 
 
-def _prices(
-    bars: list[CandleBar], index: int, *, direction: Direction, min_rr: Decimal
-) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
-    close = bars[index].close
-    atr = compute_feature("atr", bars, index)
-    if direction == Direction.LONG:
-        swing = compute_feature("last_swing_low", bars, index)
-        stop = swing.value if swing.status == TriState.TRUE else None
-        if stop is None and atr.status == TriState.TRUE and atr.value:
-            stop = close - Decimal(str(atr.value))
-        if stop is None or stop >= close:
-            return close, None, None
-        risk = close - Decimal(str(stop))
-        return close, Decimal(str(stop)), close + risk * min_rr
-    swing = compute_feature("last_swing_high", bars, index)
-    stop = swing.value if swing.status == TriState.TRUE else None
-    if stop is None and atr.status == TriState.TRUE and atr.value:
-        stop = close + Decimal(str(atr.value))
-    if stop is None or stop <= close:
-        return close, None, None
-    risk = Decimal(str(stop)) - close
-    return close, Decimal(str(stop)), close - risk * min_rr
-
-
 def _confidence(
     *,
     action: DecisionAction,
@@ -156,8 +133,18 @@ def run_decision_workflow(
     ]
     features = _feature_payload(bars, index)
     min_rr_dec = Decimal(min_rr)
-    entry, stop, target = _prices(bars, index, direction=side, min_rr=min_rr_dec)
-    structural_ok = stop is not None and target is not None
+    ctx = build_playbook_context(
+        bars, index, direction=side, min_rr=min_rr_dec, entry_path=DEFAULT_ENTRY_PATH
+    )
+    entry = Decimal(str(ctx["_entry_ref"])) if ctx.get("_entry_ref") else None
+    stop = Decimal(str(ctx["_stop_price"])) if ctx.get("_stop_price") else None
+    target = None
+    if entry is not None and stop is not None:
+        risk = abs(entry - stop)
+        if risk > 0:
+            target = (
+                entry + risk * min_rr_dec if side == Direction.LONG else entry - risk * min_rr_dec
+            )
     strategy = build_wyckoff_hdm_v1(
         version_no=1, advisory_definitions=["WYK-001", "IMB-001", "SMT-001"]
     )
@@ -165,13 +152,7 @@ def run_decision_workflow(
         strategy,
         direction=side,
         features=features,
-        context={
-            "htf_bias": side.value,
-            "structural_stop_ok": structural_ok,
-            "rr_to_tp1": float(min_rr_dec) if structural_ok else None,
-            "entry_path": "aggressive",
-            "retest_complete": False,
-        },
+        context={k: v for k, v in ctx.items() if not k.startswith("_")},
     )
     workflow.append(
         {

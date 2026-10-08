@@ -7,6 +7,7 @@ from private_trading_agents.vision import (
 )
 from private_trading_agents.workflow import DecisionAction, run_decision_workflow
 from private_trading_backtest.fixtures import (
+    FIXTURE_BOS_INDEX,
     FIXTURE_SYMBOL,
     FIXTURE_TIMEFRAME,
     frozen_bos_long_fixture,
@@ -75,7 +76,7 @@ def test_gate_d_passes_without_fabricated_prices() -> None:
 def test_unclear_vision_downgrades_enter_to_wait() -> None:
     bars = frozen_bos_long_fixture()
     clear = run_decision_workflow(
-        bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME, bar_index=35
+        bars, symbol=FIXTURE_SYMBOL, timeframe=FIXTURE_TIMEFRAME, bar_index=FIXTURE_BOS_INDEX
     )
     assert clear.action == DecisionAction.ENTER
     read = parse_vlm_payload({"readable": False, "last_price": 123})
@@ -84,7 +85,7 @@ def test_unclear_vision_downgrades_enter_to_wait() -> None:
         bars,
         symbol=FIXTURE_SYMBOL,
         timeframe=FIXTURE_TIMEFRAME,
-        bar_index=35,
+        bar_index=FIXTURE_BOS_INDEX,
         vision=verdict,
     )
     assert blocked.action == DecisionAction.WAIT

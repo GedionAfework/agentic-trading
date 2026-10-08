@@ -1,5 +1,6 @@
 """Versioned strategy engine."""
 
+from private_trading_strategies.context import DEFAULT_ENTRY_PATH, build_playbook_context
 from private_trading_strategies.evaluate import (
     STRATEGY_ENGINE_VERSION,
     StrategyDefinition,
@@ -15,6 +16,7 @@ from private_trading_strategies.types import (
 from private_trading_strategies.wyckoff_hdm import build_wyckoff_hdm_v1
 
 __all__ = [
+    "DEFAULT_ENTRY_PATH",
     "STRATEGY_ENGINE_VERSION",
     "Direction",
     "FeatureFact",
@@ -22,6 +24,7 @@ __all__ = [
     "SetupState",
     "StrategyAssessment",
     "StrategyDefinition",
+    "build_playbook_context",
     "build_wyckoff_hdm_v1",
     "evaluate_strategy",
 ]
