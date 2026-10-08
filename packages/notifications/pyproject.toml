@@ -11,6 +11,7 @@ dependencies = [
     "private-trading-strategies",
     "private-trading-knowledge",
     "private-trading-ai-gateway",
+    "private-trading-journal",
     "httpx>=0.27",
     "sqlalchemy[asyncio]>=2.0",
 ]
@@ -30,3 +31,4 @@ private-trading-market-data = { workspace = true }
 private-trading-strategies = { workspace = true }
 private-trading-knowledge = { workspace = true }
 private-trading-ai-gateway = { workspace = true }
+private-trading-journal = { workspace = true }

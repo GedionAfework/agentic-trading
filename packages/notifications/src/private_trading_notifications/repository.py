@@ -190,6 +190,24 @@ class DbBotRepository:
             "conflicts": result.conflicts,
         }
 
+    async def list_journal(self, *, user_id: uuid.UUID, limit: int) -> list[dict[str, Any]]:
+        from private_trading_journal.service import list_journal_entries
+
+        rows = await list_journal_entries(
+            self.session, owner_user_id=user_id, cohort="paper", limit=limit
+        )
+        return [
+            {
+                "instrument_symbol": r.instrument_symbol,
+                "timeframe": r.timeframe,
+                "direction": r.direction,
+                "outcome": r.outcome,
+                "realized_r": None if r.realized_r is None else float(r.realized_r),
+                "summary": r.summary,
+            }
+            for r in rows
+        ]
+
     async def analyze_photo(
         self, *, user_id: uuid.UUID, file_id: str, caption: str | None
     ) -> dict[str, Any] | None:

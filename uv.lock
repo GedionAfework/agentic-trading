@@ -1300,9 +1300,11 @@ dependencies = [
     { name = "private-trading-core" },
     { name = "private-trading-db" },
     { name = "private-trading-decision" },
+    { name = "private-trading-journal" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
     { name = "private-trading-notifications" },
+    { name = "private-trading-paper-trade" },
     { name = "private-trading-risk" },
     { name = "private-trading-strategies" },
     { name = "python-multipart" },
@@ -1319,9 +1321,11 @@ requires-dist = [
     { name = "private-trading-core", editable = "packages/core" },
     { name = "private-trading-db", editable = "packages/db" },
     { name = "private-trading-decision", editable = "packages/decision" },
+    { name = "private-trading-journal", editable = "packages/journal" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
     { name = "private-trading-notifications", editable = "packages/notifications" },
+    { name = "private-trading-paper-trade", editable = "packages/paper_trade" },
     { name = "private-trading-risk", editable = "packages/risk" },
     { name = "private-trading-strategies", editable = "packages/strategies" },
     { name = "python-multipart", specifier = ">=0.0.12" },
@@ -1434,10 +1438,16 @@ version = "0.1.0"
 source = { editable = "packages/journal" }
 dependencies = [
     { name = "private-trading-core" },
+    { name = "private-trading-db" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "private-trading-core", editable = "packages/core" }]
+requires-dist = [
+    { name = "private-trading-core", editable = "packages/core" },
+    { name = "private-trading-db", editable = "packages/db" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+]
 
 [[package]]
 name = "private-trading-knowledge"
@@ -1489,6 +1499,7 @@ dependencies = [
     { name = "private-trading-ai-gateway" },
     { name = "private-trading-core" },
     { name = "private-trading-db" },
+    { name = "private-trading-journal" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
     { name = "private-trading-strategies" },
@@ -1502,6 +1513,7 @@ requires-dist = [
     { name = "private-trading-ai-gateway", editable = "packages/ai_gateway" },
     { name = "private-trading-core", editable = "packages/core" },
     { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-journal", editable = "packages/journal" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
     { name = "private-trading-strategies", editable = "packages/strategies" },
@@ -1513,11 +1525,27 @@ name = "private-trading-paper-trade"
 version = "0.1.0"
 source = { editable = "packages/paper_trade" }
 dependencies = [
+    { name = "private-trading-backtest" },
     { name = "private-trading-core" },
+    { name = "private-trading-db" },
+    { name = "private-trading-features" },
+    { name = "private-trading-journal" },
+    { name = "private-trading-market-data" },
+    { name = "private-trading-risk" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "private-trading-core", editable = "packages/core" }]
+requires-dist = [
+    { name = "private-trading-backtest", editable = "packages/backtest" },
+    { name = "private-trading-core", editable = "packages/core" },
+    { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-features", editable = "packages/features" },
+    { name = "private-trading-journal", editable = "packages/journal" },
+    { name = "private-trading-market-data", editable = "packages/market_data" },
+    { name = "private-trading-risk", editable = "packages/risk" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+]
 
 [[package]]
 name = "private-trading-risk"
@@ -1579,6 +1607,7 @@ dependencies = [
     { name = "private-trading-db" },
     { name = "private-trading-market-data" },
     { name = "private-trading-notifications" },
+    { name = "private-trading-paper-trade" },
     { name = "redis" },
 ]
 
@@ -1590,6 +1619,7 @@ requires-dist = [
     { name = "private-trading-db", editable = "packages/db" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
     { name = "private-trading-notifications", editable = "packages/notifications" },
+    { name = "private-trading-paper-trade", editable = "packages/paper_trade" },
     { name = "redis", specifier = ">=5" },
 ]
 

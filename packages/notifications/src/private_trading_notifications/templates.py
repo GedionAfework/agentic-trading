@@ -24,9 +24,26 @@ LINK_FAILED_TEXT = (
     "Link code is invalid, expired or already used. Generate a new one in the web app."
 )
 NOT_AVAILABLE = {
-    "journal": "Journal arrives with paper trading (Phase 16/17). Nothing to show yet.",
-    "performance": "Performance analytics arrive with paper trading soak (Phase 17).",
+    "performance": "Performance analytics arrive with Phase 17 soak / analytics.",
 }
+
+
+def journal_list(items: list[dict[str, Any]]) -> str:
+    if not items:
+        return (
+            "No PAPER journal entries yet. Accept an ENTER setup via "
+            "<code>POST /v1/paper/trades</code> and let it close."
+        )
+    lines = ["<b>PAPER journal</b> (cohort=paper — never mixed with backtest)"]
+    for item in items:
+        r = item.get("realized_r")
+        r_text = "n/a" if r is None else f"{r}R"
+        lines.append(
+            f"• {escape(str(item.get('instrument_symbol')))} {escape(str(item.get('timeframe')))} "
+            f"{escape(str(item.get('direction')))} · {escape(str(item.get('outcome')))} · {r_text}"
+        )
+    lines.extend(["", FOOTER])
+    return "\n".join(lines)
 
 
 def _num(value: Any) -> str:
@@ -205,7 +222,8 @@ def help_text(*, linked: bool) -> str:
             "/markets — data freshness per market",
             "/strategies — registered strategies",
             "/settings — kill switches",
-            "/journal, /performance — arrive with paper trading",
+            "/journal — PAPER closed-trade journal",
+            "/performance — arrives with Phase 17 analytics",
             "",
             "Send free text to ask the knowledge base (answers cite approved documents).",
             "Send a chart screenshot (optionally caption <code>SYMBOL TIMEFRAME</code>) for a "

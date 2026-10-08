@@ -5,6 +5,13 @@ description = "Paper trading simulation"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "private-trading-db",
+    "private-trading-backtest",
+    "private-trading-risk",
+    "private-trading-market-data",
+    "private-trading-features",
+    "private-trading-journal",
+    "sqlalchemy[asyncio]>=2.0",
 ]
 
 [build-system]
@@ -16,3 +23,9 @@ packages = ["src/private_trading_paper_trade"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }
+private-trading-backtest = { workspace = true }
+private-trading-risk = { workspace = true }
+private-trading-market-data = { workspace = true }
+private-trading-features = { workspace = true }
+private-trading-journal = { workspace = true }

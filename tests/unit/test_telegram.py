@@ -125,6 +125,10 @@ class FakeRepo:
                 "confidence": "medium", "citations": [{"title": "Guide", "page": 3}],
                 "conflicts": []}
 
+    async def list_journal(self, *, user_id, limit):
+        self.calls.append("list_journal")
+        return []
+
     async def analyze_photo(self, *, user_id, file_id, caption):
         self.calls.append("analyze_photo")
         return None
@@ -281,7 +285,9 @@ async def test_linked_commands_route_to_repository() -> None:
     strategies = await handle_update(_message("/strategies"), repo)
     assert "wyckoff-hdm" in strategies.replies[0].text
     journal = await handle_update(_message("/journal"), repo)
-    assert journal.handled == "journal_not_available"
+    assert journal.handled == "journal"
+    text = journal.replies[0].text
+    assert "PAPER journal" in text or "No PAPER journal" in text
     ask = await handle_update(_message("what is a spring?"), repo)
     assert ask.handled == "ask" and "approved guide" in ask.replies[0].text
     assert "Guide" in ask.replies[0].text

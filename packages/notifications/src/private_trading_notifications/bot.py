@@ -83,6 +83,8 @@ class BotRepository(Protocol):
         self, *, user_id: uuid.UUID, file_id: str, caption: str | None
     ) -> dict[str, Any] | None: ...
 
+    async def list_journal(self, *, user_id: uuid.UUID, limit: int) -> list[dict[str, Any]]: ...
+
 
 def _parse_command(text: str) -> tuple[str, list[str]] | None:
     stripped = text.strip()
@@ -213,9 +215,15 @@ async def _handle_command(
         result.replies.append(
             BotReply(chat_id=chat_id, text=templates.strategies_list(await repo.list_strategies()))
         )
-    elif name in ("/journal", "/performance"):
-        result.handled = f"{name[1:]}_not_available"
-        result.replies.append(BotReply(chat_id=chat_id, text=templates.NOT_AVAILABLE[name[1:]]))
+    elif name == "/journal":
+        items = await repo.list_journal(user_id=account.user_id, limit=10)
+        result.handled = "journal"
+        result.replies.append(BotReply(chat_id=chat_id, text=templates.journal_list(items)))
+    elif name == "/performance":
+        result.handled = "performance_not_available"
+        result.replies.append(
+            BotReply(chat_id=chat_id, text=templates.NOT_AVAILABLE["performance"])
+        )
     elif name == "/settings":
         await _handle_settings(args, account, result, repo)
     else:
@@ -411,8 +419,10 @@ async def _handle_callback(callback: dict[str, Any], repo: BotRepository) -> Han
             result.replies.append(
                 BotReply(
                     chat_id=account.chat_id,
-                    text=f"Recorded: you {choice} this setup (PAPER context). "
-                    "It will appear in the journal once Phase 16/17 land.",
+                    text=(
+                        f"Recorded: you {choice} this setup (PAPER context). "
+                        "Accept it via paper trades to simulate the fill/close cycle."
+                    ),
                     callback_query_id=callback_id, callback_text="Recorded",
                 )
             )

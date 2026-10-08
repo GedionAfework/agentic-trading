@@ -30,6 +30,12 @@ from private_trading_db.models.ops import (
     OutboxEvent,
     SystemSetting,
 )
+from private_trading_db.models.paper import (
+    JournalEntry,
+    PaperAccount,
+    PaperTrade,
+    PaperTradeEvent,
+)
 from private_trading_db.models.risk import RiskAssessment, RiskPolicy, RiskPolicyVersion
 from private_trading_db.models.scanner import ScanRun, SignalCandidate
 from private_trading_db.models.strategy import (
@@ -92,4 +98,8 @@ __all__ = [
     "TelegramUpdate",
     "NotificationDelivery",
     "TelegramAlertAction",
+    "PaperAccount",
+    "PaperTrade",
+    "PaperTradeEvent",
+    "JournalEntry",
 ]

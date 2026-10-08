@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phases 0–15 landed; Phase 16 next**  
+**Status:** Active build plan — **Phases 0–16 landed; Phase 17 next**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -19,7 +19,8 @@
 **Phase 12:** Decision agent (ENTER/WAIT/HOLD/EXIT/NO_SETUP, grounded explanation, outbox snapshot)  
 **Phase 13:** Vision screenshots (upload validation, market check, Gate D, never trade authority)  
 **Phase 14:** Scanner (closed-candle pipeline, dedupe keys, kill switches, Celery queues + Redis lock, ops status)  
-**Phase 15:** Telegram bot (secret-validated webhook, one-time link, commands, alert buttons, outbox → delivery with 429/retry)
+**Phase 15:** Telegram bot (secret-validated webhook, one-time link, commands, alert buttons, outbox → delivery with 429/retry)  
+**Phase 16:** Paper trading (READY→open→close→journal, next-open fills, conservative same-candle, soak/integrity)
 
 ---
 
@@ -592,6 +593,19 @@ footer). Side fix surfaced by the smoke: `resolve_owner_user_id` is now determin
 Soak completes without state/notification integrity defects; PAPER clearly labeled.
 
 **Depends on:** Phases 8, 14.
+
+**Landing note (Oct 2026):** `private_trading_paper_trade` implements forward simulation without live
+money. Fill model is stored on `paper_accounts` / each trade (next_open, conservative_stop_first,
+fee/slippage/spread bps, max_bars, risk_pct) and is the same cost math as backtest. Lifecycle:
+accept ENTER DecisionRecord/candidate → `ready` → fill at first final candle after the signal bar →
+`open` → exit via stop / target / invalidation / timeout → `closed` + auto `journal_entries`
+(cohort=`paper`, never mixed). Same-candle stop+target always prefers stop. All rows are labeled
+`PAPER`. API: `/v1/paper/account`, `/trades`, `/trades/{id}`, `/trades/{id}/cancel`, `/monitor`,
+`/journal`. Worker beat `paper.monitor` every 60s (Redis lock). Account summary exposes soak
+progress (14-day Gate F timer) and integrity checks (closed trades must have journal, open must
+have entry, label must be PAPER). Telegram `/journal` now lists paper journal entries. Live smoke:
+seeded ENTER filled next open with adverse costs, closed on target, equity updated, journal
+auto-created, integrity ok; cancel-while-ready also verified.
 
 ---
 

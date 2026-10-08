@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover
 QUEUE_NAMES = ("market", "ai", "notifications", "backtests")
 SCAN_INTERVAL_SECONDS = 60
 DISPATCH_INTERVAL_SECONDS = 30
+PAPER_MONITOR_INTERVAL_SECONDS = 60
 
 
 def _timeframes() -> tuple[str, ...]:
@@ -124,6 +125,26 @@ async def _dispatch_notifications_async() -> dict[str, Any]:
             await dispose_engine()
 
 
+async def _monitor_paper_async() -> dict[str, Any]:
+    from private_trading_db.session import dispose_engine, get_session_factory
+    from private_trading_paper_trade.service import monitor_account
+
+    from private_trading_worker.locks import scan_lock
+
+    settings = get_settings()
+    async with scan_lock(
+        settings.redis_url, "paper:monitor", ttl_seconds=55
+    ) as acquired:
+        if not acquired:
+            return {"status": "skipped_locked"}
+        factory = get_session_factory()
+        try:
+            async with factory() as session:
+                return await monitor_account(session)
+        finally:
+            await dispose_engine()
+
+
 def create_celery_app():
     if Celery is None:
         raise RuntimeError("celery is not installed; run `uv sync`")
@@ -137,6 +158,7 @@ def create_celery_app():
             "scanner.scan_all": {"queue": "market"},
             "scanner.scan_symbols": {"queue": "market"},
             "notifications.dispatch": {"queue": "notifications"},
+            "paper.monitor": {"queue": "market"},
         },
         task_acks_late=True,
         task_reject_on_worker_lost=True,
@@ -157,6 +179,10 @@ def create_celery_app():
                 "schedule": schedule(run_every=DISPATCH_INTERVAL_SECONDS),
                 "options": {"queue": "notifications"},
             },
+            "monitor-paper-trades": {
+                "task": "paper.monitor",
+                "schedule": schedule(run_every=PAPER_MONITOR_INTERVAL_SECONDS),
+            },
         },
     )
 
@@ -176,6 +202,10 @@ def create_celery_app():
     def dispatch_notifications_task(self):  # type: ignore[no-untyped-def]
         return _run(_dispatch_notifications_async)
 
+    @app.task(name="paper.monitor", bind=True, max_retries=0)
+    def paper_monitor_task(self):  # type: ignore[no-untyped-def]
+        return _run(_monitor_paper_async)
+
     return app
 
 
@@ -193,4 +223,5 @@ def run_scanner_loop(interval_seconds: int = SCAN_INTERVAL_SECONDS) -> None:
         _run(_sync_all_async)
         _run(_scan_all_async)
         _run(_dispatch_notifications_async)
+        _run(_monitor_paper_async)
         time.sleep(interval_seconds)
