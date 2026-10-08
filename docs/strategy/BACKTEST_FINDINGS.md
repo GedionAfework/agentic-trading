@@ -56,3 +56,23 @@ The fixed SOL-only candidate was materially stronger:
 This is encoded as `SOL_MTF_CHALLENGER_V1`. It is **paper-only** and cannot
 authorize live alerts. Symbol selection was informed by the four-symbol
 comparison, so paper soak is required before any promotion discussion.
+
+## 2026-10-08 — higher-win-rate alternatives
+
+A low-volume retest-entry method was rejected: its yearly walk-forward result
+was 89 trades, 39.3% wins, and −0.022R mean after costs.
+
+A scale-out method kept the V1 entry but closed 50% at +1.25R, moved the
+remainder's stop to break-even, and targeted +4R:
+
+- Yearly walk-forward selection: 175 trades, 58.9% wins, +0.059R mean,
+  1.14 profit factor, and 13.02R maximum drawdown
+- Fixed candidate across 2022–2026: 163 trades, 54.0% wins, +0.158R mean
+- Untouched 2026 after selection on data through 2025: 26 trades, 65.4% wins,
+  +0.284R mean, and 1.76 profit factor
+- Comparable binary 3R simulation: 163 trades, 38.7% wins, +0.150R mean,
+  and 17.99R maximum drawdown
+
+This is encoded as `SOL_MTF_CHALLENGER_V2_SCALE_OUT`. It improved win rate and
+drawdown while remaining profitable, but did not approach 80% and has only 26
+trades in the untouched 2026 slice. It remains **paper-only**.
