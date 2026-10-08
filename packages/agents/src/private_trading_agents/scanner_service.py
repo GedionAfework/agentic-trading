@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Any
 
 from private_trading_core.config import get_settings
-from private_trading_db.models.identity import UserRole
+from private_trading_db.models.identity import User, UserRole
 from private_trading_db.models.market import Candle, Instrument
 from private_trading_db.models.ops import OutboxEvent, SystemSetting
 from private_trading_db.models.scanner import ScanRun, SignalCandidate
@@ -58,8 +58,20 @@ async def set_kill_switch(
 
 
 async def resolve_owner_user_id(session: AsyncSession) -> uuid.UUID | None:
+    """Deterministic owner for background scans: `system_settings.scanner_owner_user_id` if set,
+    otherwise the earliest-created active user holding the owner role."""
+    setting = await session.get(SystemSetting, "scanner_owner_user_id")
+    if setting is not None and isinstance(setting.value, dict) and setting.value.get("user_id"):
+        try:
+            return uuid.UUID(str(setting.value["user_id"]))
+        except ValueError:
+            pass
     result = await session.execute(
-        select(UserRole.user_id).where(UserRole.role == "owner").limit(1)
+        select(UserRole.user_id)
+        .join(User, User.id == UserRole.user_id)
+        .where(UserRole.role == "owner", User.status == "active")
+        .order_by(User.created_at, User.id)
+        .limit(1)
     )
     return result.scalar_one_or_none()
 

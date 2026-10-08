@@ -14,6 +14,7 @@ dependencies = [
     "private-trading-backtest",
     "private-trading-decision",
     "private-trading-agents",
+    "private-trading-notifications",
     "redis>=5",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
@@ -41,3 +42,4 @@ private-trading-risk = { workspace = true }
 private-trading-backtest = { workspace = true }
 private-trading-decision = { workspace = true }
 private-trading-agents = { workspace = true }
+private-trading-notifications = { workspace = true }

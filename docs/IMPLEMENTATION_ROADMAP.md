@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phases 0–14 landed; Phase 15 next**  
+**Status:** Active build plan — **Phases 0–15 landed; Phase 16 next**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -18,7 +18,8 @@
 **Phase 11:** Decision Model v1 (logistic ranker baseline/challenger, shadow until promote, gate-bound rank score)  
 **Phase 12:** Decision agent (ENTER/WAIT/HOLD/EXIT/NO_SETUP, grounded explanation, outbox snapshot)  
 **Phase 13:** Vision screenshots (upload validation, market check, Gate D, never trade authority)  
-**Phase 14:** Scanner (closed-candle pipeline, dedupe keys, kill switches, Celery queues + Redis lock, ops status)
+**Phase 14:** Scanner (closed-candle pipeline, dedupe keys, kill switches, Celery queues + Redis lock, ops status)  
+**Phase 15:** Telegram bot (secret-validated webhook, one-time link, commands, alert buttons, outbox → delivery with 429/retry)
 
 ---
 
@@ -549,6 +550,28 @@ disabled scanner yields `skipped_disabled` for every pair.
 Alert numbers match stored Decision/setup; unauthorized chat gets no strategy content.
 
 **Depends on:** Phases 2, 12–14.
+
+**Landing note (Oct 2026):** Bot logic lives in `private_trading_notifications` (shared by the API
+webhook, the Celery `notifications.dispatch` task every 30s, and the `python -m
+private_trading_telegram` long-polling fallback). `POST /v1/telegram/webhook` accepts only requests
+whose `X-Telegram-Bot-Api-Secret-Token` matches `TELEGRAM_WEBHOOK_SECRET` (fails closed when
+unset) and is idempotent on `update_id`. Linking: `POST /v1/telegram/link` mints a one-time
+8-char code (sha256 stored, 10-min TTL); the bot consumes it via `/start CODE`; revoked accounts
+can re-link. Unlinked chats and group chats receive no strategy/market/decision content and
+trigger no repository reads. Commands: `/setups`, `/markets`, `/strategies`, `/settings`
+(kill switches; owner/admin only to change), `/journal` and `/performance` reply "not yet"
+until Phases 16–17. Free text → `ask_knowledge`; photo → vision workflow (needs bot token to
+download). Alerts: outbox `signal.candidate` → one `NotificationDelivery` per linked chat
+(unique per candidate+chat) → send with policy 429 `retry_after` honoured, backoff
+5s/30s/2m/10m, max 5 attempts, permanent 4xx fails immediately; `notifications_enabled=false`
+pauses sending. Buttons View / Why? / Dismiss / Record decision store `TelegramAlertAction`
+rows for the journal. Alert numbers are copied from stored payload/DecisionRecord (display
+capped at the Numeric(20,8) precision). Without a bot token the transport is `dry_run` and
+`/v1/telegram/status` reports `bot_configured=false`. The SRS Appendix D text is not in this
+repo; the template fields follow the roadmap summary (symbol/TF, strategy version, action,
+setup, confidence band, entry/stop/target/R:R, risk gate, blockers, PAPER/decision-support
+footer). Side fix surfaced by the smoke: `resolve_owner_user_id` is now deterministic
+(`system_settings.scanner_owner_user_id` or earliest-created active owner).
 
 ---
 

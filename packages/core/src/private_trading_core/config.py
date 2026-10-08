@@ -49,6 +49,9 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""
+    telegram_bot_username: str = ""
+    telegram_api_base_url: str = "https://api.telegram.org"
+    telegram_link_ttl_seconds: int = 600
 
     scanner_enabled: bool = True
     notifications_enabled: bool = True

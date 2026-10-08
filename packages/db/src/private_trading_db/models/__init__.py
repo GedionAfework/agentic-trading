@@ -1,4 +1,7 @@
 from private_trading_db.models.ai import ModelRegistry, PromptVersion
+from private_trading_db.models.backtest import BacktestDataset, BacktestJob
+from private_trading_db.models.decision_model import DecisionModel
+from private_trading_db.models.decision_record import DecisionRecord
 from private_trading_db.models.identity import (
     MfaMethod,
     Session,
@@ -6,7 +9,6 @@ from private_trading_db.models.identity import (
     User,
     UserRole,
 )
-from private_trading_db.models.backtest import BacktestDataset, BacktestJob
 from private_trading_db.models.knowledge import (
     ChunkEmbedding,
     DocumentChunk,
@@ -37,8 +39,12 @@ from private_trading_db.models.strategy import (
     StrategyTestCase,
     StrategyVersion,
 )
-from private_trading_db.models.decision_model import DecisionModel
-from private_trading_db.models.decision_record import DecisionRecord
+from private_trading_db.models.telegram import (
+    NotificationDelivery,
+    TelegramAlertAction,
+    TelegramLinkChallenge,
+    TelegramUpdate,
+)
 from private_trading_db.models.training import TrainingDataset, TrainingDatasetVersion
 from private_trading_db.models.vision import ScreenshotJob
 
@@ -82,4 +88,8 @@ __all__ = [
     "ScreenshotJob",
     "ScanRun",
     "SignalCandidate",
+    "TelegramLinkChallenge",
+    "TelegramUpdate",
+    "NotificationDelivery",
+    "TelegramAlertAction",
 ]

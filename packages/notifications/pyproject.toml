@@ -5,6 +5,14 @@ description = "Telegram, push, in-app notifications"
 requires-python = ">=3.12"
 dependencies = [
     "private-trading-core",
+    "private-trading-db",
+    "private-trading-agents",
+    "private-trading-market-data",
+    "private-trading-strategies",
+    "private-trading-knowledge",
+    "private-trading-ai-gateway",
+    "httpx>=0.27",
+    "sqlalchemy[asyncio]>=2.0",
 ]
 
 [build-system]
@@ -16,3 +24,9 @@ packages = ["src/private_trading_notifications"]
 
 [tool.uv.sources]
 private-trading-core = { workspace = true }
+private-trading-db = { workspace = true }
+private-trading-agents = { workspace = true }
+private-trading-market-data = { workspace = true }
+private-trading-strategies = { workspace = true }
+private-trading-knowledge = { workspace = true }
+private-trading-ai-gateway = { workspace = true }

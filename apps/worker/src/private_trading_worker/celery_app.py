@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover
 
 QUEUE_NAMES = ("market", "ai", "notifications", "backtests")
 SCAN_INTERVAL_SECONDS = 60
+DISPATCH_INTERVAL_SECONDS = 30
 
 
 def _timeframes() -> tuple[str, ...]:
@@ -98,6 +99,31 @@ async def _sync_all_async() -> list[dict[str, Any]]:
     return results
 
 
+async def _dispatch_notifications_async() -> dict[str, Any]:
+    from private_trading_db.session import dispose_engine, get_session_factory
+    from private_trading_notifications.delivery import dispatch
+    from private_trading_notifications.telegram_client import build_client
+
+    from private_trading_worker.locks import scan_lock
+
+    settings = get_settings()
+    async with scan_lock(
+        settings.redis_url, "notifications:dispatch", ttl_seconds=25
+    ) as acquired:
+        if not acquired:
+            return {"status": "skipped_locked"}
+        client = build_client(
+            token=settings.telegram_bot_token, base_url=settings.telegram_api_base_url
+        )
+        factory = get_session_factory()
+        try:
+            async with factory() as session:
+                return await dispatch(session, client=client)
+        finally:
+            await client.aclose()
+            await dispose_engine()
+
+
 def create_celery_app():
     if Celery is None:
         raise RuntimeError("celery is not installed; run `uv sync`")
@@ -110,6 +136,7 @@ def create_celery_app():
             "scanner.sync_all": {"queue": "market"},
             "scanner.scan_all": {"queue": "market"},
             "scanner.scan_symbols": {"queue": "market"},
+            "notifications.dispatch": {"queue": "notifications"},
         },
         task_acks_late=True,
         task_reject_on_worker_lost=True,
@@ -125,6 +152,11 @@ def create_celery_app():
                 "task": "scanner.scan_all",
                 "schedule": schedule(run_every=SCAN_INTERVAL_SECONDS),
             },
+            "dispatch-notifications": {
+                "task": "notifications.dispatch",
+                "schedule": schedule(run_every=DISPATCH_INTERVAL_SECONDS),
+                "options": {"queue": "notifications"},
+            },
         },
     )
 
@@ -139,6 +171,10 @@ def create_celery_app():
     @app.task(name="scanner.scan_symbols", bind=True, max_retries=0)
     def scan_symbols_task(self, symbols: list[str]):  # type: ignore[no-untyped-def]
         return _run(lambda: _scan_all_async(tuple(symbols)))
+
+    @app.task(name="notifications.dispatch", bind=True, max_retries=0)
+    def dispatch_notifications_task(self):  # type: ignore[no-untyped-def]
+        return _run(_dispatch_notifications_async)
 
     return app
 
@@ -156,4 +192,5 @@ def run_scanner_loop(interval_seconds: int = SCAN_INTERVAL_SECONDS) -> None:
     while True:
         _run(_sync_all_async)
         _run(_scan_all_async)
+        _run(_dispatch_notifications_async)
         time.sleep(interval_seconds)

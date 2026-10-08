@@ -9,6 +9,7 @@ dependencies = [
     "private-trading-db",
     "private-trading-agents",
     "private-trading-market-data",
+    "private-trading-notifications",
     "redis>=5",
 ]
 
@@ -24,3 +25,4 @@ private-trading-core = { workspace = true }
 private-trading-db = { workspace = true }
 private-trading-agents = { workspace = true }
 private-trading-market-data = { workspace = true }
+private-trading-notifications = { workspace = true }
