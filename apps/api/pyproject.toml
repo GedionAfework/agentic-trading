@@ -18,6 +18,7 @@ dependencies = [
     "private-trading-paper-trade",
     "private-trading-journal",
     "private-trading-analytics",
+    "private-trading-release",
     "redis>=5",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
@@ -49,3 +50,4 @@ private-trading-notifications = { workspace = true }
 private-trading-paper-trade = { workspace = true }
 private-trading-journal = { workspace = true }
 private-trading-analytics = { workspace = true }
+private-trading-release = { workspace = true }

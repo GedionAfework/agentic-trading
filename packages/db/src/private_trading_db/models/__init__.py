@@ -5,6 +5,7 @@ from private_trading_db.models.analytics import (
     PerformanceSnapshot,
     RetrainRequest,
 )
+from private_trading_db.models.release import ReleaseSignoff, ReleaseWaiver
 from private_trading_db.models.backtest import BacktestDataset, BacktestJob
 from private_trading_db.models.decision_model import DecisionModel
 from private_trading_db.models.decision_record import DecisionRecord
@@ -112,4 +113,6 @@ __all__ = [
     "FeedbackReviewItem",
     "CalibrationSnapshot",
     "RetrainRequest",
+    "ReleaseSignoff",
+    "ReleaseWaiver",
 ]

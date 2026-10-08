@@ -14,5 +14,8 @@ These runbooks support Phase 19 production hardening. Prefer measured SQL / metr
 | [FIREWALL.md](./FIREWALL.md) | Host firewall / private binds |
 | [STRIDE_CONTROLS.md](./STRIDE_CONTROLS.md) | Architecture Appendix D mapping |
 | [PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md) | Gates A + G sign-off |
+| [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) | Phase 20 live alerts (no broker execution) |
+| [WAIVERS.md](./WAIVERS.md) | Deferred Must log |
 
 Kill switches: `PUT /v1/scanner/switches` (`scanner_enabled`, `notifications_enabled`) — owner/admin only.
+Live alerts: `POST /v1/release/live-alerts` after Gates A–G + soak (or waivers).

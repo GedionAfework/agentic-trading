@@ -601,7 +601,7 @@ async def account_summary(
         .where(PaperTrade.account_id == account.id, PaperTrade.status == STATUS_CLOSED)
     )
     closed_count, sum_r = closed.one()
-    integrity = await _integrity_checks(session, account_id=account.id)
+    integrity = await integrity_report(session, account_id=account.id)
     return {
         "account_id": str(account.id),
         "label": account.label,
@@ -617,7 +617,7 @@ async def account_summary(
     }
 
 
-async def _integrity_checks(
+async def integrity_report(
     session: AsyncSession, *, account_id: uuid.UUID
 ) -> dict[str, Any]:
     """Fail closed on state defects that would block Gate F."""

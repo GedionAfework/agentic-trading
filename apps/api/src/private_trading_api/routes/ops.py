@@ -7,6 +7,7 @@ from fastapi.responses import PlainTextResponse
 from private_trading_agents.scanner_service import get_kill_switches
 from private_trading_core.config import Settings, get_settings, production_settings_errors
 from private_trading_core.errors import AppError, UnauthorizedError
+from private_trading_release.execution import execution_status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +31,9 @@ async def readiness(
         db_ok = False
         errors.append(f"database_unreachable: {exc.__class__.__name__}")
     switches = await get_kill_switches(session)
+    execution = execution_status()
+    if not execution["ok"]:
+        errors.append("broker_execution_artifacts_present")
     status = "ready" if db_ok and not errors else "not_ready"
     return {
         "status": status,
@@ -37,10 +41,11 @@ async def readiness(
         "database_ok": db_ok,
         "kill_switches": switches,
         "production_policy_errors": errors,
-        "broker_execution": "disabled",
+        "broker_execution": execution,
         "notes": [
             "Kill switches are owner/admin controllable via /v1/scanner/switches.",
             "Live broker execution remains undeployed (FR-SIG-008).",
+            "Production alerts require /v1/release live_alerts_enabled after Gates A–G.",
         ],
     }
 

@@ -13,6 +13,7 @@ from private_trading_db.models.scanner import ScanRun, SignalCandidate
 from private_trading_features.types import CandleBar
 from private_trading_market_data.catalog import list_enabled_instruments
 from private_trading_market_data.health import instrument_snapshot
+from private_trading_release.service import evaluate_for_candidate
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -140,7 +141,18 @@ async def _register_candidate(
         return existing, False
 
     record = await persist_decision(session, owner_user_id=owner_user_id, snapshot=outcome.snapshot)
-    publish_state = "published" if notifications_enabled else "suppressed_kill_switch"
+    gate = await evaluate_for_candidate(
+        session,
+        owner_user_id=owner_user_id,
+        symbol=symbol,
+        timeframe=timeframe,
+        action=outcome.snapshot.action.value,
+        confidence_band=outcome.snapshot.confidence_band,
+        risk_approved=bool(outcome.snapshot.risk_approved),
+        notifications_enabled=notifications_enabled,
+        now=now,
+    )
+    publish_state = str(gate["publish_state"])
     candidate = SignalCandidate(
         owner_user_id=owner_user_id,
         dedupe_key=outcome.dedupe_key,
@@ -154,13 +166,20 @@ async def _register_candidate(
         candle_open_time=outcome.snapshot.bar_open_time,
         decision_record_id=record.id,
         publish_state=publish_state,
-        payload=candidate_payload(outcome.snapshot),
+        payload={
+            **candidate_payload(outcome.snapshot),
+            "release_gate": {
+                "mode": gate.get("mode"),
+                "reasons": gate.get("reasons"),
+                "allow": gate.get("allow"),
+            },
+        },
         first_seen_at=now,
         last_seen_at=now,
     )
     session.add(candidate)
     await session.flush()
-    if notifications_enabled:
+    if gate.get("allow"):
         session.add(
             OutboxEvent(
                 topic="signal.candidate",
@@ -173,6 +192,7 @@ async def _register_candidate(
                     "action": candidate.action,
                     "decision_record_id": str(record.id),
                     "confidence_band": outcome.snapshot.confidence_band,
+                    "release_mode": gate.get("mode"),
                 },
             )
         )

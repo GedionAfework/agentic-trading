@@ -13,6 +13,6 @@
 | D-09 | Target policy | Structure TPs vs opposite-MSB vs R-multiples | | No |
 | D-10 | Public research authority | Stay Tier 5 unless promoted | Propose Tier 5 only | No |
 | D-11 | Aggressive entry allowed in v1 alerts? | Yes with tighter risk / No safer-only | | No |
-| D-12 | First alert channels | Telegram only vs Telegram+mobile | | No |
+| D-12 | First alert channels | Telegram only vs Telegram+mobile | Telegram only (Phase 20 default) | Yes |
 
 Update this table as decisions lock. Do not hide defaults inside code without a row here.

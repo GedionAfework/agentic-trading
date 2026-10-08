@@ -189,6 +189,22 @@ async def send_pending(
     switches = await get_kill_switches(session)
     if not switches.get("notifications_enabled", True):
         return {"sent": 0, "retry": 0, "failed": 0, "skipped_kill_switch": True}
+    from private_trading_release.policy import in_quiet_hours
+    from private_trading_release.service import get_policy
+
+    policy = await get_policy(session)
+    if policy.live_alerts_enabled and in_quiet_hours(
+        current,
+        start=policy.quiet_hours_utc_start,
+        end=policy.quiet_hours_utc_end,
+    ):
+        return {
+            "sent": 0,
+            "retry": 0,
+            "failed": 0,
+            "skipped_kill_switch": False,
+            "skipped_quiet_hours": True,
+        }
     result = await session.execute(
         select(NotificationDelivery)
         .where(

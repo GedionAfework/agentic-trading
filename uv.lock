@@ -25,6 +25,7 @@ members = [
     "private-trading-market-data",
     "private-trading-notifications",
     "private-trading-paper-trade",
+    "private-trading-release",
     "private-trading-risk",
     "private-trading-strategies",
     "private-trading-telegram",
@@ -46,6 +47,7 @@ dependencies = [
     { name = "private-trading-features" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
+    { name = "private-trading-release" },
     { name = "private-trading-risk" },
     { name = "private-trading-strategies" },
     { name = "private-trading-telegram" },
@@ -75,6 +77,7 @@ requires-dist = [
     { name = "private-trading-features", editable = "packages/features" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
+    { name = "private-trading-release", editable = "packages/release" },
     { name = "private-trading-risk", editable = "packages/risk" },
     { name = "private-trading-strategies", editable = "packages/strategies" },
     { name = "private-trading-telegram", editable = "apps/telegram" },
@@ -1256,6 +1259,7 @@ dependencies = [
     { name = "private-trading-features" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
+    { name = "private-trading-release" },
     { name = "private-trading-risk" },
     { name = "private-trading-strategies" },
 ]
@@ -1268,6 +1272,7 @@ requires-dist = [
     { name = "private-trading-features", editable = "packages/features" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
+    { name = "private-trading-release", editable = "packages/release" },
     { name = "private-trading-risk", editable = "packages/risk" },
     { name = "private-trading-strategies", editable = "packages/strategies" },
 ]
@@ -1328,6 +1333,7 @@ dependencies = [
     { name = "private-trading-market-data" },
     { name = "private-trading-notifications" },
     { name = "private-trading-paper-trade" },
+    { name = "private-trading-release" },
     { name = "private-trading-risk" },
     { name = "private-trading-strategies" },
     { name = "python-multipart" },
@@ -1350,6 +1356,7 @@ requires-dist = [
     { name = "private-trading-market-data", editable = "packages/market_data" },
     { name = "private-trading-notifications", editable = "packages/notifications" },
     { name = "private-trading-paper-trade", editable = "packages/paper_trade" },
+    { name = "private-trading-release", editable = "packages/release" },
     { name = "private-trading-risk", editable = "packages/risk" },
     { name = "private-trading-strategies", editable = "packages/strategies" },
     { name = "python-multipart", specifier = ">=0.0.12" },
@@ -1527,6 +1534,7 @@ dependencies = [
     { name = "private-trading-journal" },
     { name = "private-trading-knowledge" },
     { name = "private-trading-market-data" },
+    { name = "private-trading-release" },
     { name = "private-trading-strategies" },
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
@@ -1542,6 +1550,7 @@ requires-dist = [
     { name = "private-trading-journal", editable = "packages/journal" },
     { name = "private-trading-knowledge", editable = "packages/knowledge" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
+    { name = "private-trading-release", editable = "packages/release" },
     { name = "private-trading-strategies", editable = "packages/strategies" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
 ]
@@ -1570,6 +1579,25 @@ requires-dist = [
     { name = "private-trading-journal", editable = "packages/journal" },
     { name = "private-trading-market-data", editable = "packages/market_data" },
     { name = "private-trading-risk", editable = "packages/risk" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+]
+
+[[package]]
+name = "private-trading-release"
+version = "0.1.0"
+source = { editable = "packages/release" }
+dependencies = [
+    { name = "private-trading-core" },
+    { name = "private-trading-db" },
+    { name = "private-trading-paper-trade" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "private-trading-core", editable = "packages/core" },
+    { name = "private-trading-db", editable = "packages/db" },
+    { name = "private-trading-paper-trade", editable = "packages/paper_trade" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
 ]
 

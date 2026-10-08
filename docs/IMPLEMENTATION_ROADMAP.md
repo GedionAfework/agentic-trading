@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phases 0–19 landed; Phase 20 next**  
+**Status:** Active build plan — **Phases 0–20 landed (baseline complete)**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -24,6 +24,7 @@
 **Phase 17:** Mobile Expo client (SecureStore auth, setups/ask/paper/journal + SRS screens, `privatetrading://` scheme)
 **Phase 18:** Analytics (performance snapshots, sample-size warnings, similar setups, calibration/drift, retrain governance; Telegram `/performance`; journal narration from SQL only)
 **Phase 19:** Security/ops hardening (nginx/TLS, private binds, rate limits, metrics, encrypted backups, secret scan CI, runbooks, Gates A+G report)
+**Phase 20:** Live alerts-only release (approved symbols/TFs, quiet hours, checklist/waivers, execution undeployed)
 
 ---
 
@@ -724,6 +725,14 @@ Release checklist signed; automated broker execution remains disabled.
 
 **Depends on:** Phases 16–19.
 
+**Landing note (Oct 2026):** Package `private_trading_release` + migration `c5e9a1b34d67`.
+Lab mode (`live_alerts_enabled=false`) keeps prior Telegram alert behavior behind kill switches.
+Production mode enforces approved symbols/TFs, ENTER+risk+confidence, quiet hours UTC,
+checklist A–G, paper soak/integrity (or explicit waivers). Scanner stamps `publish_state`
+`suppressed_release_gate` when blocked; delivery skips quiet hours. APIs under `/v1/release/*`.
+`execution_status` asserts no `packages/execution` and no broker credential env vars.
+Docs: `docs/ops/RELEASE_CHECKLIST.md`, `WAIVERS.md`. Broker execution remains undeployed.
+
 ---
 
 ## 4. Cross-cutting work (every phase)
@@ -814,10 +823,10 @@ Document answers in `docs/strategy/OPEN_DECISIONS.md` as they lock:
 - [ ] Vision verified against market data (or advisory-only if Gate D fails)
 - [ ] Telegram Q&A, screenshots, alerts
 - [ ] Mobile: setups, chat, journal, analytics (or explicit waiver)
-- [ ] Paper soak completed
+- [ ] Paper soak completed (Gate F timer + ops sign-off; waivers supported)
 - [x] Monitoring, backups, restore, kill switches
 - [x] No public Ollama/DB/Redis
-- [ ] Live broker execution disabled
+- [x] Live broker execution disabled
 
 ---
 

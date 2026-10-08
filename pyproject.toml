@@ -17,6 +17,7 @@ dependencies = [
     "private-trading-decision",
     "private-trading-agents",
     "private-trading-analytics",
+    "private-trading-release",
     "private-trading-worker",
     "private-trading-telegram",
 ]
@@ -55,6 +56,7 @@ members = [
     "packages/journal",
     "packages/notifications",
     "packages/analytics",
+    "packages/release",
 ]
 
 [tool.uv.sources]
@@ -76,6 +78,7 @@ private-trading-paper-trade = { workspace = true }
 private-trading-journal = { workspace = true }
 private-trading-notifications = { workspace = true }
 private-trading-analytics = { workspace = true }
+private-trading-release = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
