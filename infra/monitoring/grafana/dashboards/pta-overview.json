@@ -1,0 +1,36 @@
+{
+  "title": "PTA Overview",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP requests",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(pta_http_requests_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request latency (sum/count)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "rate(pta_http_request_duration_seconds_sum[5m]) / rate(pta_http_request_duration_seconds_count[5m])",
+          "legendFormat": "avg seconds"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Process uptime",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "targets": [{ "expr": "pta_process_uptime_seconds" }]
+    }
+  ]
+}

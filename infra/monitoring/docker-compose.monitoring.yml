@@ -1,0 +1,31 @@
+# Optional observability stack. Does not publish data-plane ports publicly.
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: pta-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - pta_prom_data:/prometheus
+    ports:
+      - "127.0.0.1:9091:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: pta-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme-grafana}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - pta_grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pta_prom_data:
+  pta_grafana_data:

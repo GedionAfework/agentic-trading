@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: PTA
+    folder: Private Trading
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,6 +1,6 @@
 # Private Self-Hosted AI Trading Copilot — Unified Implementation Roadmap
 
-**Status:** Active build plan — **Phases 0–18 landed; Phase 19 next**  
+**Status:** Active build plan — **Phases 0–19 landed; Phase 20 next**  
 **Sources:** SRS v2.0, SDS v2.0, Architecture Design v2.0, Database Design v2.0, Complete Implementation Roadmap v1.0  
 **Safety boundary:** No autonomous live-money execution in baseline  
 **Last updated:** October 2026  
@@ -23,6 +23,7 @@
 **Phase 16:** Paper trading (READY→open→close→journal, next-open fills, conservative same-candle, soak/integrity)  
 **Phase 17:** Mobile Expo client (SecureStore auth, setups/ask/paper/journal + SRS screens, `privatetrading://` scheme)
 **Phase 18:** Analytics (performance snapshots, sample-size warnings, similar setups, calibration/drift, retrain governance; Telegram `/performance`; journal narration from SQL only)
+**Phase 19:** Security/ops hardening (nginx/TLS, private binds, rate limits, metrics, encrypted backups, secret scan CI, runbooks, Gates A+G report)
 
 ---
 
@@ -693,6 +694,15 @@ External exposure scan clean; restore + kill-switch tests pass; no critical/high
 
 **Depends on:** running system from prior phases.
 
+**Landing note (Oct 2026):** Infra: `docker-compose.prod.yml` (loopback binds), `infra/nginx` TLS
+proxy with `limit_req`, optional Prometheus/Grafana under `infra/monitoring/`. API: sliding-window
+rate limits, upload Content-Length 413, `/metrics` Prometheus text, `/ops/readiness` + exposure
+checklist, production settings guard (refuses insecure JWT/DB/object defaults). Scripts:
+`backup_postgres.sh`, `restore_drill.sh`, `exposure_scan.sh`, `secret_scan.py`. CI secret scan +
+optional gitleaks. Runbooks + `PRODUCTION_READINESS.md` + `STRIDE_CONTROLS.md` under `docs/ops/`.
+Unit tests cover rate limit, metrics auth, upload abuse, production guard. First encrypted restore
+drill remains an ops sign-off before Phase 20.
+
 ---
 
 ### Phase 20 — Live recommendation release (alerts only)
@@ -805,8 +815,8 @@ Document answers in `docs/strategy/OPEN_DECISIONS.md` as they lock:
 - [ ] Telegram Q&A, screenshots, alerts
 - [ ] Mobile: setups, chat, journal, analytics (or explicit waiver)
 - [ ] Paper soak completed
-- [ ] Monitoring, backups, restore, kill switches
-- [ ] No public Ollama/DB/Redis
+- [x] Monitoring, backups, restore, kill switches
+- [x] No public Ollama/DB/Redis
 - [ ] Live broker execution disabled
 
 ---

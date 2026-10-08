@@ -61,6 +61,43 @@ class Settings(BaseSettings):
     market_http_timeout_seconds: float = 20.0
     market_default_timeframes: str = "15m,1h"
 
+    # Phase 19 — hardening
+    rate_limit_enabled: bool = True
+    rate_limit_requests: int = 120
+    rate_limit_window_seconds: int = 60
+    rate_limit_auth_requests: int = 20
+    rate_limit_upload_requests: int = 10
+    metrics_enabled: bool = True
+    metrics_bearer_token: str = ""
+    max_upload_bytes: int = 8 * 1024 * 1024
+    allow_insecure_defaults: bool = False
+
+
+_INSECURE_JWT_DEFAULTS = frozenset({"dev-only-change-me", "changeme", "secret", "test"})
+
+
+def production_settings_errors(settings: Settings) -> list[str]:
+    """Return blocking misconfigurations for production (Gate A)."""
+    errors: list[str] = []
+    if settings.app_env != "production":
+        return errors
+    if settings.allow_insecure_defaults:
+        errors.append("allow_insecure_defaults must be false in production")
+    secret = (settings.jwt_secret or "").strip()
+    if not secret or secret.lower() in _INSECURE_JWT_DEFAULTS or len(secret) < 32:
+        errors.append("jwt_secret must be a strong unique value (>=32 chars) in production")
+    if "localhost" in settings.database_url or "127.0.0.1" in settings.database_url:
+        # Binding privately is fine; pointing at localhost hostname in k8s may be wrong —
+        # warn-style: only flag default trading:trading credentials.
+        pass
+    if "trading:trading@" in settings.database_url:
+        errors.append("database_url must not use the default trading:trading credentials")
+    if settings.object_storage_secret_key in {"test", "minioadmin", ""}:
+        errors.append("object_storage_secret_key must not use lab defaults in production")
+    if settings.telegram_bot_token and not settings.telegram_webhook_secret:
+        errors.append("telegram_webhook_secret required when telegram_bot_token is set")
+    return errors
+
 
 @lru_cache
 def get_settings() -> Settings:

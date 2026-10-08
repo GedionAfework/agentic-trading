@@ -1,0 +1,37 @@
+# Production-oriented overlay: data plane binds to loopback only.
+# Usage:
+#   docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.prod.yml up -d
+#
+# Nginx terminates TLS and proxies to the API on the host/docker network.
+# Postgres / Redis / object storage are NOT published on 0.0.0.0.
+
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pta_pg_data:/var/lib/postgresql/data
+      - pta_pg_backups:/backups
+
+  redis:
+    ports:
+      - "127.0.0.1:6380:6379"
+    command: ["redis-server", "--bind", "0.0.0.0", "--protected-mode", "yes"]
+
+  object-storage:
+    ports:
+      - "127.0.0.1:9000:9090"
+
+  # Optional local LLM — never publish publicly
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "127.0.0.1:11434:11434"
+  #   volumes:
+  #     - pta_ollama:/root/.ollama
+
+volumes:
+  pta_pg_backups:
+  # pta_ollama:

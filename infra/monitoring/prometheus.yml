@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: pta-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+    # When METRICS_BEARER_TOKEN is set:
+    # authorization:
+    #   type: Bearer
+    #   credentials: "${METRICS_BEARER_TOKEN}"
+
+  - job_name: redis
+    static_configs:
+      - targets: ["host.docker.internal:9121"]
+    # optional redis_exporter
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["host.docker.internal:9187"]
+    # optional postgres_exporter
