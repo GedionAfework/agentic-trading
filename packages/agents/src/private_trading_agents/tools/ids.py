@@ -8,6 +8,7 @@ from enum import StrEnum
 class ToolId(StrEnum):
     """Allowlisted tool names. Unknown IDs are never invokable."""
 
+    # Specialist compute tools (never granted to AG-01)
     FEATURES_COMPUTE = "features.compute"
     STRATEGY_EVALUATE = "strategy.evaluate"
     RISK_ASSESS = "risk.assess"
@@ -15,6 +16,17 @@ class ToolId(StrEnum):
     SIGNAL_CHECK_GATES = "signal.check_gates"
     VISION_CHECK_VERDICT = "vision.check_verdict"
     ML_RANK = "ml.rank"
+
+    # AG-01 routing tools only — call specialists, never raw engines
+    AGENT_RUN_MARKET_DATA = "agent.run_market_data"
+    AGENT_RUN_VISION = "agent.run_vision"
+    AGENT_RUN_JOURNAL = "agent.run_journal"
+    AGENT_RUN_STRATEGY = "agent.run_strategy"
+    AGENT_RUN_SIGNAL = "agent.run_signal"
+    AGENT_RUN_RISK = "agent.run_risk"
+    AGENT_RUN_ML = "agent.run_ml"
+    AGENT_RUN_KNOWLEDGE = "agent.run_knowledge"
+    WORKFLOW_FINISH = "workflow.finish"
 
 
 class SideEffect(StrEnum):

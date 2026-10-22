@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from private_trading_agents.contracts import AgentId
 from private_trading_agents.tools.catalog import TOOL_CATALOG, get_tool
+from private_trading_agents.tools.context import ToolContext
 from private_trading_agents.tools.errors import (
     SideEffectDeniedError,
     ToolPermissionError,
@@ -19,14 +20,6 @@ from private_trading_agents.tools.permissions import (
     ALLOWED_SIDE_EFFECTS,
     has_permission,
 )
-
-
-@dataclass(slots=True)
-class ToolContext:
-    """Opaque runtime extras that must not travel through untrusted JSON."""
-
-    model: Any | None = None
-    extras: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +67,7 @@ def invoke_tool(
         raise
 
     if spec.accepts_context:
-        result = spec.handler(validated_in, model=context.model if context else None)
+        result = spec.handler(validated_in, context=context)
     else:
         result = spec.handler(validated_in)
 

@@ -11,7 +11,8 @@ from private_trading_agents.contracts import (
     DecisionMlAgentIn,
     DecisionMlAgentOut,
 )
-from private_trading_agents.tools import ToolContext, ToolId
+from private_trading_agents.tools import ToolId
+from private_trading_agents.tools.context import ToolContext
 from private_trading_agents.tools.schemas import MlRankOut
 
 

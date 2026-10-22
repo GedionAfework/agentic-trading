@@ -17,13 +17,22 @@ from private_trading_core.errors import AppError
 from pydantic import BaseModel
 
 from private_trading_agents.contracts import AgentId
+from private_trading_agents.tools.context import ToolContext
 from private_trading_agents.tools.errors import (
     SideEffectDeniedError,
     ToolPermissionError,
     UnknownToolError,
 )
 from private_trading_agents.tools.ids import ToolId
-from private_trading_agents.tools.runtime import ToolContext, invoke_tool
+from private_trading_agents.tools.policy import PolicyViolationError
+from private_trading_agents.tools.runtime import invoke_tool
+
+_DENY_ERRORS = (
+    ToolPermissionError,
+    UnknownToolError,
+    SideEffectDeniedError,
+    PolicyViolationError,
+)
 
 TraceStatus = Literal["ok", "denied", "error", "budget_exceeded"]
 
@@ -114,7 +123,7 @@ class AgentRuntime:
                 payload=payload,
                 context=context,
             )
-        except (ToolPermissionError, UnknownToolError, SideEffectDeniedError) as exc:
+        except _DENY_ERRORS as exc:
             duration_ms = (perf_counter() - started) * 1000.0
             self._calls += 1
             self._wall_ms += duration_ms

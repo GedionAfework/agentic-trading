@@ -1,6 +1,7 @@
 """Allowlisted agent tools with least-privilege permissions."""
 
 from private_trading_agents.tools.catalog import TOOL_CATALOG, catalog_summary, get_tool
+from private_trading_agents.tools.context import ToolContext
 from private_trading_agents.tools.errors import (
     SideEffectDeniedError,
     ToolPermissionError,
@@ -13,8 +14,12 @@ from private_trading_agents.tools.permissions import (
     has_permission,
     permissions_matrix,
 )
+from private_trading_agents.tools.policy import (
+    REQUIRED_BEFORE_FINISH,
+    PolicyGraph,
+    PolicyViolationError,
+)
 from private_trading_agents.tools.runtime import (
-    ToolContext,
     ToolInvocation,
     assert_tool_registered,
     invoke_tool,
@@ -23,7 +28,10 @@ from private_trading_agents.tools.runtime import (
 
 __all__ = [
     "AGENT_TOOL_ALLOWLIST",
+    "REQUIRED_BEFORE_FINISH",
     "TOOL_CATALOG",
+    "PolicyGraph",
+    "PolicyViolationError",
     "SideEffect",
     "SideEffectDeniedError",
     "ToolContext",

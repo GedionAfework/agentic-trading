@@ -52,7 +52,7 @@ from private_trading_agents.roles import (
 )
 from private_trading_agents.vision import VisionVerdict
 
-WORKFLOW_VERSION = "0.1.1"
+WORKFLOW_VERSION = "0.2.0"
 
 
 class DecisionAction(StrEnum):
@@ -129,30 +129,60 @@ def run_decision_workflow(
     min_rr: str = "2.0",
     asset_class: str = "crypto",
     vision: VisionVerdict | None = None,
+    mode: Literal["deterministic", "agentic"] = "deterministic",
 ) -> DecisionSnapshot:
-    """AG-01 orchestrates independent Pydantic-validated AG-02..AG-09 roles."""
-    with agent_session() as session:
-        snapshot = _run_decision_workflow(
-            bars,
-            symbol=symbol,
-            timeframe=timeframe,
-            bar_index=bar_index,
-            direction=direction,
-            data_fresh=data_fresh,
-            market_actionable=market_actionable,
-            position_state=position_state,
-            citations=citations,
-            model=model,
-            model_id=model_id,
-            model_mode=model_mode,
-            min_rr=min_rr,
-            asset_class=asset_class,
-            vision=vision,
-        )
+    """AG-01 orchestrates AG-02..AG-09.
+
+    mode=deterministic (default): fixed specialist sequence (paper/scanner safe).
+    mode=agentic: AG-01 routing-tool loop under the policy graph.
+    """
+    from private_trading_agents.contracts import AgentId
+    from private_trading_agents.orchestrator import ag01_budget, run_agentic_orchestrator
+
+    budgets = {AgentId.AG01_ORCHESTRATOR: ag01_budget()} if mode == "agentic" else {}
+    with agent_session(budgets=budgets) as session:
+        if mode == "agentic":
+            snapshot = run_agentic_orchestrator(
+                bars,
+                symbol=symbol,
+                timeframe=timeframe,
+                bar_index=bar_index,
+                direction=direction,
+                data_fresh=data_fresh,
+                market_actionable=market_actionable,
+                position_state=position_state,
+                citations=citations,
+                model=model,
+                model_id=model_id,
+                model_mode=model_mode,
+                min_rr=min_rr,
+                asset_class=asset_class,
+                vision=vision,
+            )
+        else:
+            snapshot = _run_decision_workflow(
+                bars,
+                symbol=symbol,
+                timeframe=timeframe,
+                bar_index=bar_index,
+                direction=direction,
+                data_fresh=data_fresh,
+                market_actionable=market_actionable,
+                position_state=position_state,
+                citations=citations,
+                model=model,
+                model_id=model_id,
+                model_mode=model_mode,
+                min_rr=min_rr,
+                asset_class=asset_class,
+                vision=vision,
+            )
         traces = session.as_dicts()
         evidence = dict(snapshot.evidence)
         evidence["tool_traces"] = traces
         evidence["agent_runtime"] = "v1"
+        evidence["orchestrator_mode"] = mode
+        evidence["workflow_version"] = WORKFLOW_VERSION
         return replace(snapshot, tool_traces=traces, evidence=evidence)
 
 

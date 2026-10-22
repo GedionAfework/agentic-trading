@@ -200,7 +200,8 @@ def handle_vision_check_verdict(
     )
 
 
-def handle_ml_rank(payload: MlRankIn, *, model: Any | None = None) -> MlRankOut:
+def handle_ml_rank(payload: MlRankIn, *, context: Any | None = None) -> MlRankOut:
+    model = context.model if context is not None else None
     if model is None or not payload.model_present or not payload.gates_open:
         return MlRankOut(
             invoked=False,

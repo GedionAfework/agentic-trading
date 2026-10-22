@@ -28,8 +28,12 @@ def test_every_agent_has_an_explicit_allowlist_entry() -> None:
         assert agent in AGENT_TOOL_ALLOWLIST
 
 
-def test_orchestrator_and_journal_have_zero_tools() -> None:
-    assert allowed_tools(AgentId.AG01_ORCHESTRATOR) == frozenset()
+def test_orchestrator_only_has_routing_tools_and_journal_has_none() -> None:
+    ag01 = allowed_tools(AgentId.AG01_ORCHESTRATOR)
+    assert ToolId.AGENT_RUN_MARKET_DATA in ag01
+    assert ToolId.WORKFLOW_FINISH in ag01
+    assert ToolId.FEATURES_COMPUTE not in ag01
+    assert ToolId.RISK_ASSESS not in ag01
     assert allowed_tools(AgentId.AG08_JOURNAL) == frozenset()
 
 
@@ -72,8 +76,16 @@ def test_cross_agent_tool_use_is_denied() -> None:
     assert not has_permission(AgentId.AG05_STRATEGY, ToolId.FEATURES_COMPUTE)
 
 
-def test_orchestrator_cannot_invoke_any_registered_tool() -> None:
-    for tool in ToolId:
+def test_orchestrator_cannot_invoke_specialist_compute_tools() -> None:
+    for tool in (
+        ToolId.FEATURES_COMPUTE,
+        ToolId.STRATEGY_EVALUATE,
+        ToolId.RISK_ASSESS,
+        ToolId.EXPLAIN_GROUNDED,
+        ToolId.SIGNAL_CHECK_GATES,
+        ToolId.VISION_CHECK_VERDICT,
+        ToolId.ML_RANK,
+    ):
         with pytest.raises(ToolPermissionError):
             invoke_tool(
                 agent=AgentId.AG01_ORCHESTRATOR,
@@ -98,7 +110,9 @@ def test_market_data_agent_can_compute_features() -> None:
 
 def test_permissions_matrix_is_auditable() -> None:
     matrix = permissions_matrix()
-    assert matrix["AG-01"] == []
+    assert "agent.run_market_data" in matrix["AG-01"]
+    assert "workflow.finish" in matrix["AG-01"]
+    assert "features.compute" not in matrix["AG-01"]
     assert matrix["AG-04"] == ["features.compute"]
     assert matrix["AG-06"] == ["risk.assess"]
     summary = catalog_summary()

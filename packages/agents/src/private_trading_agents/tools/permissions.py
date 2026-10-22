@@ -1,7 +1,7 @@
 """Least-privilege tool allowlist per agent.
 
 Deny by default: an agent may only invoke tools listed here.
-AG-01 orchestrates roles and holds zero tools.
+AG-01 gets routing tools only — never specialist compute engines.
 AG-08 is a stub and holds zero tools.
 No WRITE / EXTERNAL / EXECUTE tools are granted to anyone.
 """
@@ -11,9 +11,23 @@ from __future__ import annotations
 from private_trading_agents.contracts import AgentId
 from private_trading_agents.tools.ids import ToolId
 
+_AG01_ROUTING = frozenset(
+    {
+        ToolId.AGENT_RUN_MARKET_DATA,
+        ToolId.AGENT_RUN_VISION,
+        ToolId.AGENT_RUN_JOURNAL,
+        ToolId.AGENT_RUN_STRATEGY,
+        ToolId.AGENT_RUN_SIGNAL,
+        ToolId.AGENT_RUN_RISK,
+        ToolId.AGENT_RUN_ML,
+        ToolId.AGENT_RUN_KNOWLEDGE,
+        ToolId.WORKFLOW_FINISH,
+    }
+)
+
 # Frozen allowlists — edit deliberately; never grant by omission of a deny list.
 AGENT_TOOL_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
-    AgentId.AG01_ORCHESTRATOR: frozenset(),
+    AgentId.AG01_ORCHESTRATOR: _AG01_ROUTING,
     AgentId.AG02_KNOWLEDGE: frozenset({ToolId.EXPLAIN_GROUNDED}),
     AgentId.AG03_VISION: frozenset({ToolId.VISION_CHECK_VERDICT}),
     AgentId.AG04_MARKET_DATA: frozenset({ToolId.FEATURES_COMPUTE}),
