@@ -34,6 +34,16 @@ from private_trading_agents.tools.handlers import (
     handle_vision_check_verdict,
 )
 from private_trading_agents.tools.ids import SideEffect, ToolId
+from private_trading_agents.tools.journal_handlers import (
+    handle_journal_narrate_performance,
+    handle_journal_summarize_metrics,
+)
+from private_trading_agents.tools.journal_schemas import (
+    JournalNarrateIn,
+    JournalNarrateOut,
+    JournalSummarizeIn,
+    JournalSummarizeOut,
+)
 from private_trading_agents.tools.routing_handlers import (
     handle_agent_run_journal,
     handle_agent_run_knowledge,
@@ -174,6 +184,22 @@ TOOL_CATALOG: dict[ToolId, ToolSpec] = {
         handler=handle_llm_narrate_facts,
         accepts_context=True,
     ),
+    ToolId.JOURNAL_SUMMARIZE_METRICS: ToolSpec(
+        tool_id=ToolId.JOURNAL_SUMMARIZE_METRICS,
+        description="Aggregate supplied closed-trade rows for one cohort (read-only).",
+        side_effect=SideEffect.NONE,
+        input_model=JournalSummarizeIn,
+        output_model=JournalSummarizeOut,
+        handler=handle_journal_summarize_metrics,
+    ),
+    ToolId.JOURNAL_NARRATE_PERFORMANCE: ToolSpec(
+        tool_id=ToolId.JOURNAL_NARRATE_PERFORMANCE,
+        description="Narrate a cohort metrics snapshot; never authorizes trades.",
+        side_effect=SideEffect.NONE,
+        input_model=JournalNarrateIn,
+        output_model=JournalNarrateOut,
+        handler=handle_journal_narrate_performance,
+    ),
     ToolId.AGENT_RUN_MARKET_DATA: ToolSpec(
         tool_id=ToolId.AGENT_RUN_MARKET_DATA,
         description="AG-01 routes to AG-04 market data specialist.",
@@ -194,7 +220,7 @@ TOOL_CATALOG: dict[ToolId, ToolSpec] = {
     ),
     ToolId.AGENT_RUN_JOURNAL: ToolSpec(
         tool_id=ToolId.AGENT_RUN_JOURNAL,
-        description="AG-01 routes to AG-08 journal specialist (stub).",
+        description="AG-01 routes to AG-08 journal specialist (read-only).",
         side_effect=SideEffect.NONE,
         input_model=RoutingEmptyIn,
         output_model=RoutingStepOut,

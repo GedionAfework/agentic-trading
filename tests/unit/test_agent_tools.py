@@ -28,13 +28,17 @@ def test_every_agent_has_an_explicit_allowlist_entry() -> None:
         assert agent in AGENT_TOOL_ALLOWLIST
 
 
-def test_orchestrator_only_has_routing_tools_and_journal_has_none() -> None:
+def test_orchestrator_only_has_routing_tools_and_journal_is_read_only() -> None:
     ag01 = allowed_tools(AgentId.AG01_ORCHESTRATOR)
     assert ToolId.AGENT_RUN_MARKET_DATA in ag01
     assert ToolId.WORKFLOW_FINISH in ag01
     assert ToolId.FEATURES_COMPUTE not in ag01
     assert ToolId.RISK_ASSESS not in ag01
-    assert allowed_tools(AgentId.AG08_JOURNAL) == frozenset()
+    ag08 = allowed_tools(AgentId.AG08_JOURNAL)
+    assert ToolId.JOURNAL_SUMMARIZE_METRICS in ag08
+    assert ToolId.JOURNAL_NARRATE_PERFORMANCE in ag08
+    assert ToolId.RISK_ASSESS not in ag08
+    assert ToolId.WORKFLOW_FINISH not in ag08
 
 
 def test_permissions_are_least_privilege_and_disjoint_where_expected() -> None:

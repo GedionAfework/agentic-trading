@@ -250,18 +250,34 @@ class KnowledgeAgentOut(BaseModel):
     step: AgentStep
 
 
-# --- AG-08 Journal (stub contract; narrative comes later) ---
+# --- AG-08 Journal (read-only analytics; never writes / never trades) ---
 
 
 class JournalAgentIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
+    cohort: Literal["paper", "backtest", "manual"] = "paper"
+    trades: list[dict[str, Any]] = Field(default_factory=list)
+    strategy_code: str = "*"
+    instrument_symbol: str = "*"
+    timeframe: str = "*"
+    session_bucket: str = "*"
+    # Optional pre-built snapshot; if set, summarize step may be skipped.
+    snapshot: dict[str, Any] | None = None
 
 
 class JournalAgentOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    enabled: bool = False
+    cohort: str | None = None
+    sample_size: int | None = None
+    sample_status: str | None = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    narrative: str | None = None
+    authorizes_trade: Literal[False] = False
     step: AgentStep
 
 

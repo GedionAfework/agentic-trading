@@ -23,6 +23,10 @@ class ToolId(StrEnum):
     VISION_EXTRACT = "vision.extract"
     LLM_NARRATE_FACTS = "llm.narrate_facts"
 
+    # AG-08 journal — read-only analytics over supplied rows/snapshots (never writes)
+    JOURNAL_SUMMARIZE_METRICS = "journal.summarize_metrics"
+    JOURNAL_NARRATE_PERFORMANCE = "journal.narrate_performance"
+
     # AG-01 routing tools only — call specialists, never raw engines
     AGENT_RUN_MARKET_DATA = "agent.run_market_data"
     AGENT_RUN_VISION = "agent.run_vision"

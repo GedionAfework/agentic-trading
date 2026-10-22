@@ -2,7 +2,7 @@
 
 Deny by default: an agent may only invoke tools listed here.
 AG-01 gets routing tools only — never specialist compute engines.
-AG-08 is a stub and holds zero tools.
+AG-08 gets read-only journal analytics tools only (never writes / never trade tools).
 EXTERNAL tools are listed for AG-02/AG-03 but still gated by the enable flag.
 The allowlist is frozen at import — runtime mutation is a policy tamper.
 """
@@ -52,7 +52,12 @@ _RAW_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
     AgentId.AG05_STRATEGY: frozenset({ToolId.STRATEGY_EVALUATE}),
     AgentId.AG06_RISK: frozenset({ToolId.RISK_ASSESS}),
     AgentId.AG07_SIGNAL: frozenset({ToolId.SIGNAL_CHECK_GATES}),
-    AgentId.AG08_JOURNAL: frozenset(),
+    AgentId.AG08_JOURNAL: frozenset(
+        {
+            ToolId.JOURNAL_SUMMARIZE_METRICS,
+            ToolId.JOURNAL_NARRATE_PERFORMANCE,
+        }
+    ),
     AgentId.AG09_DECISION_ML: frozenset({ToolId.ML_RANK}),
 }
 
