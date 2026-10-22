@@ -18,6 +18,17 @@ from private_trading_agents.roles import (
     run_strategy_agent,
     run_vision_agent,
 )
+from private_trading_agents.tools import (
+    AGENT_TOOL_ALLOWLIST,
+    ToolId,
+    ToolPermissionError,
+    UnknownToolError,
+    allowed_tools,
+    catalog_summary,
+    has_permission,
+    invoke_tool,
+    permissions_matrix,
+)
 from private_trading_agents.workflow import (
     WORKFLOW_VERSION,
     CitationRef,
@@ -27,6 +38,7 @@ from private_trading_agents.workflow import (
 )
 
 __all__ = [
+    "AGENT_TOOL_ALLOWLIST",
     "WORKFLOW_VERSION",
     "AgentId",
     "CitationModel",
@@ -37,6 +49,14 @@ __all__ = [
     "MarketDataAgentOut",
     "OrchestratorAgentIn",
     "OrchestratorAgentOut",
+    "ToolId",
+    "ToolPermissionError",
+    "UnknownToolError",
+    "allowed_tools",
+    "catalog_summary",
+    "has_permission",
+    "invoke_tool",
+    "permissions_matrix",
     "run_decision_ml_agent",
     "run_decision_workflow",
     "run_journal_agent",

@@ -8,6 +8,8 @@ from private_trading_agents.contracts import (
     VisionAgentIn,
     VisionAgentOut,
 )
+from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools.schemas import VisionCheckVerdictOut
 
 
 def run_vision_agent(payload: VisionAgentIn | dict | None) -> VisionAgentOut:
@@ -15,22 +17,28 @@ def run_vision_agent(payload: VisionAgentIn | dict | None) -> VisionAgentOut:
         inp = VisionAgentIn(attached=False)
     else:
         inp = VisionAgentIn.model_validate(payload)
-    if not inp.attached:
-        return VisionAgentOut(
-            needs_clarification=False,
-            blocker=None,
-            step=AgentStep(
-                agent=AgentId.AG03_VISION,
-                status="skipped",
-                note="vision not attached",
-            ),
-        )
+    result = invoke_tool(
+        agent=AgentId.AG03_VISION,
+        tool=ToolId.VISION_CHECK_VERDICT,
+        payload={
+            "attached": inp.attached,
+            "status": inp.status,
+            "consistent": inp.consistent,
+            "needs_clarification": inp.needs_clarification,
+            "blocker": inp.blocker,
+        },
+    )
+    assert isinstance(result, VisionCheckVerdictOut)
     return VisionAgentOut(
-        needs_clarification=inp.needs_clarification,
-        blocker=inp.blocker,
+        needs_clarification=result.needs_clarification,
+        blocker=result.blocker,
         step=AgentStep(
             agent=AgentId.AG03_VISION,
-            status=inp.status or "ok",
-            note="supporting evidence only",
+            status=result.status,
+            note=(
+                "vision not attached"
+                if result.skipped
+                else "supporting evidence only"
+            ),
         ),
     )

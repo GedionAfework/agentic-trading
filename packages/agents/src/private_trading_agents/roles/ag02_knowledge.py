@@ -9,16 +9,21 @@ from private_trading_agents.contracts import (
     KnowledgeAgentIn,
     KnowledgeAgentOut,
 )
-from private_trading_agents.explain import grounded_explanation
+from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools.schemas import ExplainGroundedOut
 
 
 def run_knowledge_agent(payload: KnowledgeAgentIn | dict) -> KnowledgeAgentOut:
     inp = KnowledgeAgentIn.model_validate(payload)
-    # Citations are structured IDs/excerpts already in facts when provided by orchestrator.
-    explanation = grounded_explanation(inp.facts)
+    result = invoke_tool(
+        agent=AgentId.AG02_KNOWLEDGE,
+        tool=ToolId.EXPLAIN_GROUNDED,
+        payload={"facts": inp.facts},
+    )
+    assert isinstance(result, ExplainGroundedOut)
     return KnowledgeAgentOut(
-        explanation=explanation,
-        explanation_source="deterministic",
+        explanation=result.explanation,
+        explanation_source=result.explanation_source,
         step=AgentStep(
             agent=AgentId.AG02_KNOWLEDGE,
             status=AgentStatus.OK.value,

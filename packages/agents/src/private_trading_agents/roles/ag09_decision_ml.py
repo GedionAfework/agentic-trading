@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from private_trading_agents.adapters import feature_models_to_payload
 from private_trading_agents.contracts import (
     AgentId,
     AgentStep,
     DecisionMlAgentIn,
     DecisionMlAgentOut,
 )
+from private_trading_agents.tools import ToolContext, ToolId, invoke_tool
+from private_trading_agents.tools.schemas import MlRankOut
 
 
 def run_decision_ml_agent(
@@ -19,30 +20,28 @@ def run_decision_ml_agent(
     model: Any | None = None,
 ) -> DecisionMlAgentOut:
     inp = DecisionMlAgentIn.model_validate(payload)
-    if model is None or not inp.model_present or not inp.gates_open:
-        return DecisionMlAgentOut(
-            invoked=False,
-            step=AgentStep(
-                agent=AgentId.AG09_DECISION_ML,
-                status="skipped",
-                note="ranker omitted or gates already closed",
-            ),
-        )
-    features = feature_models_to_payload(inp.features)
-    ranked = model.decide(
-        features,
-        strategy_ready=True,
-        risk_approved=True,
-        mode=inp.model_mode or "shadow",
+    result = invoke_tool(
+        agent=AgentId.AG09_DECISION_ML,
+        tool=ToolId.ML_RANK,
+        payload={
+            "features": {
+                name: fact.model_dump() for name, fact in inp.features.items()
+            },
+            "gates_open": inp.gates_open,
+            "model_mode": inp.model_mode,
+            "model_present": inp.model_present,
+        },
+        context=ToolContext(model=model),
     )
+    assert isinstance(result, MlRankOut)
     return DecisionMlAgentOut(
-        invoked=True,
-        model_score=ranked.score,
-        model_band=ranked.band,
-        recommends_enter=ranked.recommendation == "ENTER",
+        invoked=result.invoked,
+        model_score=result.model_score,
+        model_band=result.model_band,
+        recommends_enter=result.recommends_enter,
         step=AgentStep(
             agent=AgentId.AG09_DECISION_ML,
-            status="scored",
-            note=f"band={ranked.band} mode={inp.model_mode or 'shadow'}",
+            status=result.status,
+            note=result.note,
         ),
     )
