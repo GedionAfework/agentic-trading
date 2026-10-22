@@ -26,6 +26,12 @@ from private_trading_agents.roles import (
     run_strategy_agent,
     run_vision_agent,
 )
+from private_trading_agents.shadow import (
+    ShadowCompareResult,
+    compare_decision_snapshots,
+    run_decision_with_optional_shadow,
+    shadow_agentic_enabled,
+)
 from private_trading_agents.tools import (
     AGENT_TOOL_ALLOWLIST,
     ToolId,
@@ -60,6 +66,7 @@ __all__ = [
     "MarketDataAgentOut",
     "OrchestratorAgentIn",
     "OrchestratorAgentOut",
+    "ShadowCompareResult",
     "ToolId",
     "ToolPermissionError",
     "ToolTrace",
@@ -68,10 +75,12 @@ __all__ = [
     "allowed_tools",
     "call_tool",
     "catalog_summary",
+    "compare_decision_snapshots",
     "has_permission",
     "invoke_tool",
     "permissions_matrix",
     "run_decision_ml_agent",
+    "run_decision_with_optional_shadow",
     "run_decision_workflow",
     "run_journal_agent",
     "run_knowledge_agent",
@@ -80,5 +89,6 @@ __all__ = [
     "run_signal_agent",
     "run_strategy_agent",
     "run_vision_agent",
+    "shadow_agentic_enabled",
 ]
 __version__ = WORKFLOW_VERSION

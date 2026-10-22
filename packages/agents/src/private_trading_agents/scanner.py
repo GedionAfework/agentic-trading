@@ -19,14 +19,14 @@ from private_trading_strategies.specialists import (
     evaluate_specialist,
 )
 
+from private_trading_agents.shadow import run_decision_with_optional_shadow
 from private_trading_agents.workflow import (
     DecisionAction,
     DecisionSnapshot,
-    run_decision_workflow,
     run_specialist_decision,
 )
 
-SCANNER_VERSION = "0.3.0"
+SCANNER_VERSION = "0.3.1"
 MIN_BARS = 50
 
 
@@ -126,7 +126,8 @@ def evaluate_closed_candle(
             setup_state="no_setup",
             notes=["prefilter_bos_false"],
         )
-    snapshot = run_decision_workflow(
+    # Deterministic primary; optional agentic shadow for soak parity (never overrides).
+    snapshot = run_decision_with_optional_shadow(
         bars,
         symbol=symbol,
         timeframe=timeframe,
@@ -136,6 +137,7 @@ def evaluate_closed_candle(
         market_actionable=actionable,
         min_rr=min_rr,
         asset_class=asset_class,
+        mode="deterministic",
     )
     outcome = ScanOutcome(
         status="completed",

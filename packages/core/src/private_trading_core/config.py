@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     notifications_enabled: bool = True
     # Agent EXTERNAL tools (RAG / VLM / LLM narrate). Off by default — least privilege.
     agent_external_tools_enabled: bool = False
+    # Run agentic orchestrator in shadow beside deterministic paper/scanner decisions.
+    # Never overrides primary action / paper opens. Off by default.
+    agentic_shadow_enabled: bool = False
 
     # Public market data (no secrets required for Binance spot klines)
     binance_base_url: str = "https://api.binance.com"
