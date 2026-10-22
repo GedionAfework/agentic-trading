@@ -4,10 +4,10 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
+from private_trading_agents.ask_agent import run_ask_agent
 from private_trading_ai_gateway import AIGateway
 from private_trading_core.config import Settings, get_settings
 from private_trading_db.services.audit import record_audit
-from private_trading_knowledge.ask import ask_knowledge
 from private_trading_knowledge.ingest import approve_document, list_documents, upload_document
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -128,7 +128,8 @@ async def post_ask(
     gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
 ) -> AskResponse:
     user.require_roles("owner", "admin")
-    result = await ask_knowledge(
+    # Ask AI surface: AG-02 knowledge tools only — never trade authority.
+    result = await run_ask_agent(
         session,
         question=body.question,
         user_id=user.id,
@@ -149,6 +150,8 @@ async def post_ask(
         metadata={
             "sufficient_evidence": result.sufficient_evidence,
             "citation_count": len(result.citations),
+            "agent": result.agent,
+            "authorizes_trade": False,
         },
     )
     await session.commit()
@@ -161,4 +164,5 @@ async def post_ask(
         conflicts=result.conflicts,
         model=result.model,
         prompt_version=result.prompt_version,
+        meta=result.meta(),
     )

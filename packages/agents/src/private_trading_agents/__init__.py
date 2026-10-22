@@ -8,6 +8,12 @@ from private_trading_agents.agent_runtime import (
     agent_session,
     call_tool,
 )
+from private_trading_agents.ask_agent import (
+    AskAgentResult,
+    AskTradeAuthorityError,
+    assert_ask_surface_permissions,
+    run_ask_agent,
+)
 from private_trading_agents.contracts import (
     AgentId,
     CitationModel,
@@ -57,6 +63,8 @@ __all__ = [
     "AgentBudget",
     "AgentId",
     "AgentSession",
+    "AskAgentResult",
+    "AskTradeAuthorityError",
     "BudgetExceededError",
     "CitationModel",
     "CitationRef",
@@ -73,12 +81,14 @@ __all__ = [
     "UnknownToolError",
     "agent_session",
     "allowed_tools",
+    "assert_ask_surface_permissions",
     "call_tool",
     "catalog_summary",
     "compare_decision_snapshots",
     "has_permission",
     "invoke_tool",
     "permissions_matrix",
+    "run_ask_agent",
     "run_decision_ml_agent",
     "run_decision_with_optional_shadow",
     "run_decision_workflow",
