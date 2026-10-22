@@ -22,6 +22,12 @@ from private_trading_agents.contracts import (
     OrchestratorAgentIn,
     OrchestratorAgentOut,
 )
+from private_trading_agents.journal_surface import (
+    JournalNarrateResult,
+    JournalTradeAuthorityError,
+    assert_journal_surface_permissions,
+    run_journal_narrate_surface,
+)
 from private_trading_agents.roles import (
     run_decision_ml_agent,
     run_journal_agent,
@@ -70,6 +76,8 @@ __all__ = [
     "CitationRef",
     "DecisionAction",
     "DecisionSnapshot",
+    "JournalNarrateResult",
+    "JournalTradeAuthorityError",
     "MarketDataAgentIn",
     "MarketDataAgentOut",
     "OrchestratorAgentIn",
@@ -82,6 +90,7 @@ __all__ = [
     "agent_session",
     "allowed_tools",
     "assert_ask_surface_permissions",
+    "assert_journal_surface_permissions",
     "call_tool",
     "catalog_summary",
     "compare_decision_snapshots",
@@ -93,6 +102,7 @@ __all__ = [
     "run_decision_with_optional_shadow",
     "run_decision_workflow",
     "run_journal_agent",
+    "run_journal_narrate_surface",
     "run_knowledge_agent",
     "run_market_data_agent",
     "run_risk_agent",

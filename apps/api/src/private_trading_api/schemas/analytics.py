@@ -42,6 +42,7 @@ class NarrateOut(BaseModel):
     snapshot_id: uuid.UUID
     cohort: str
     narrative: str
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class FeedbackCreate(BaseModel):

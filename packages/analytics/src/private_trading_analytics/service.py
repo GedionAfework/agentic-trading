@@ -302,11 +302,19 @@ def calibration_to_dict(snap: CalibrationSnapshot) -> dict[str, Any]:
 async def narrate_snapshot(
     session: AsyncSession, *, snapshot_id: uuid.UUID, owner_user_id: uuid.UUID
 ) -> dict[str, Any]:
+    from private_trading_agents.journal_surface import run_journal_narrate_surface
+
     snap = await get_performance(session, snapshot_id=snapshot_id, owner_user_id=owner_user_id)
     if snap is None:
         raise AppError("NOT_FOUND", "Performance snapshot not found", retryable=False)
-    text = narrate_performance(snapshot_to_dict(snap))
-    return {"snapshot_id": str(snap.id), "cohort": snap.cohort, "narrative": text}
+    # AG-08 journal surface — read-only narration, no trade authority.
+    narrated = run_journal_narrate_surface(snapshot=snapshot_to_dict(snap))
+    return {
+        "snapshot_id": str(snap.id),
+        "cohort": snap.cohort,
+        "narrative": narrated.narrative,
+        "meta": narrated.meta(),
+    }
 
 
 async def narrate_calibration_snapshot(
