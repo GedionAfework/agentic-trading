@@ -15,9 +15,10 @@ from private_trading_agents.tools.errors import (
     ToolPermissionError,
     UnknownToolError,
 )
+from private_trading_agents.tools.external_gate import external_tools_enabled
 from private_trading_agents.tools.ids import SideEffect, ToolId
 from private_trading_agents.tools.permissions import (
-    ALLOWED_SIDE_EFFECTS,
+    allowed_side_effects,
     has_permission,
 )
 
@@ -43,7 +44,7 @@ def invoke_tool(
     Order of checks (fail closed):
     1. Tool must be registered.
     2. Agent must be explicitly permitted for that tool.
-    3. Tool side-effect must be NONE or READ.
+    3. Side-effect must be allowed (NONE/READ; EXTERNAL only if enabled).
     4. Input must validate against the tool schema.
     5. Handler runs; output must validate against the tool schema.
     """
@@ -54,7 +55,10 @@ def invoke_tool(
     if not has_permission(agent, spec.tool_id):
         raise ToolPermissionError(agent=agent.value, tool=spec.tool_id.value)
 
-    if spec.side_effect.value not in ALLOWED_SIDE_EFFECTS:
+    permitted_effects = allowed_side_effects(
+        external_enabled=external_tools_enabled(context)
+    )
+    if spec.side_effect.value not in permitted_effects:
         raise SideEffectDeniedError(
             tool=spec.tool_id.value,
             side_effect=spec.side_effect.value,

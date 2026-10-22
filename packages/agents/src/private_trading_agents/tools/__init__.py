@@ -7,9 +7,11 @@ from private_trading_agents.tools.errors import (
     ToolPermissionError,
     UnknownToolError,
 )
+from private_trading_agents.tools.external_gate import external_tools_enabled
 from private_trading_agents.tools.ids import SideEffect, ToolId
 from private_trading_agents.tools.permissions import (
     AGENT_TOOL_ALLOWLIST,
+    allowed_side_effects,
     allowed_tools,
     has_permission,
     permissions_matrix,
@@ -39,9 +41,11 @@ __all__ = [
     "ToolInvocation",
     "ToolPermissionError",
     "UnknownToolError",
+    "allowed_side_effects",
     "allowed_tools",
     "assert_tool_registered",
     "catalog_summary",
+    "external_tools_enabled",
     "get_tool",
     "has_permission",
     "invoke_tool",

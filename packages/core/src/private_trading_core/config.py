@@ -55,6 +55,8 @@ class Settings(BaseSettings):
 
     scanner_enabled: bool = True
     notifications_enabled: bool = True
+    # Agent EXTERNAL tools (RAG / VLM / LLM narrate). Off by default — least privilege.
+    agent_external_tools_enabled: bool = False
 
     # Public market data (no secrets required for Binance spot klines)
     binance_base_url: str = "https://api.binance.com"

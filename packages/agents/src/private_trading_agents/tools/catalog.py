@@ -8,6 +8,22 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from private_trading_agents.tools.external_handlers import (
+    handle_knowledge_ask,
+    handle_knowledge_retrieve,
+    handle_llm_narrate_facts,
+    handle_vision_extract,
+)
+from private_trading_agents.tools.external_schemas import (
+    KnowledgeAskIn,
+    KnowledgeAskOut,
+    KnowledgeRetrieveIn,
+    KnowledgeRetrieveOut,
+    LlmNarrateFactsIn,
+    LlmNarrateFactsOut,
+    VisionExtractIn,
+    VisionExtractOut,
+)
 from private_trading_agents.tools.handlers import (
     handle_explain_grounded,
     handle_features_compute,
@@ -120,6 +136,42 @@ TOOL_CATALOG: dict[ToolId, ToolSpec] = {
         input_model=MlRankIn,
         output_model=MlRankOut,
         handler=handle_ml_rank,
+        accepts_context=True,
+    ),
+    ToolId.KNOWLEDGE_RETRIEVE: ToolSpec(
+        tool_id=ToolId.KNOWLEDGE_RETRIEVE,
+        description="Private RAG retrieve — untrusted chunks as data only.",
+        side_effect=SideEffect.EXTERNAL,
+        input_model=KnowledgeRetrieveIn,
+        output_model=KnowledgeRetrieveOut,
+        handler=handle_knowledge_retrieve,
+        accepts_context=True,
+    ),
+    ToolId.KNOWLEDGE_ASK: ToolSpec(
+        tool_id=ToolId.KNOWLEDGE_ASK,
+        description="Private RAG ask — cannot alter tool policy or open gates.",
+        side_effect=SideEffect.EXTERNAL,
+        input_model=KnowledgeAskIn,
+        output_model=KnowledgeAskOut,
+        handler=handle_knowledge_ask,
+        accepts_context=True,
+    ),
+    ToolId.VISION_EXTRACT: ToolSpec(
+        tool_id=ToolId.VISION_EXTRACT,
+        description="VLM chart extract + verify; never authorizes trades.",
+        side_effect=SideEffect.EXTERNAL,
+        input_model=VisionExtractIn,
+        output_model=VisionExtractOut,
+        handler=handle_vision_extract,
+        accepts_context=True,
+    ),
+    ToolId.LLM_NARRATE_FACTS: ToolSpec(
+        tool_id=ToolId.LLM_NARRATE_FACTS,
+        description="LLM narrate structured facts; rejects invented numbers.",
+        side_effect=SideEffect.EXTERNAL,
+        input_model=LlmNarrateFactsIn,
+        output_model=LlmNarrateFactsOut,
+        handler=handle_llm_narrate_facts,
         accepts_context=True,
     ),
     ToolId.AGENT_RUN_MARKET_DATA: ToolSpec(

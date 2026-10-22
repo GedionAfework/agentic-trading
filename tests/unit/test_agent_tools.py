@@ -47,10 +47,20 @@ def test_permissions_are_least_privilege_and_disjoint_where_expected() -> None:
         assert len(agents) == 1, f"{tool} owners={agents}"
 
 
-def test_catalog_only_registers_safe_side_effects() -> None:
+def test_catalog_side_effects_are_none_read_or_gated_external() -> None:
+    external_ids = {
+        ToolId.KNOWLEDGE_RETRIEVE,
+        ToolId.KNOWLEDGE_ASK,
+        ToolId.VISION_EXTRACT,
+        ToolId.LLM_NARRATE_FACTS,
+    }
     for spec in TOOL_CATALOG.values():
-        assert spec.side_effect.value in ALLOWED_SIDE_EFFECTS
-        assert spec.side_effect in {SideEffect.NONE, SideEffect.READ}
+        if spec.side_effect == SideEffect.EXTERNAL:
+            assert spec.tool_id in external_ids
+            assert spec.side_effect.value not in ALLOWED_SIDE_EFFECTS
+        else:
+            assert spec.side_effect.value in ALLOWED_SIDE_EFFECTS
+            assert spec.side_effect in {SideEffect.NONE, SideEffect.READ}
 
 
 def test_unknown_tool_is_rejected() -> None:

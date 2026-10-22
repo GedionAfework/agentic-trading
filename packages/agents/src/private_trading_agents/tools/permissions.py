@@ -26,10 +26,25 @@ _AG01_ROUTING = frozenset(
 )
 
 # Frozen allowlists — edit deliberately; never grant by omission of a deny list.
+_AG02_TOOLS = frozenset(
+    {
+        ToolId.EXPLAIN_GROUNDED,
+        ToolId.KNOWLEDGE_RETRIEVE,
+        ToolId.KNOWLEDGE_ASK,
+        ToolId.LLM_NARRATE_FACTS,
+    }
+)
+_AG03_TOOLS = frozenset(
+    {
+        ToolId.VISION_CHECK_VERDICT,
+        ToolId.VISION_EXTRACT,
+    }
+)
+
 AGENT_TOOL_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
     AgentId.AG01_ORCHESTRATOR: _AG01_ROUTING,
-    AgentId.AG02_KNOWLEDGE: frozenset({ToolId.EXPLAIN_GROUNDED}),
-    AgentId.AG03_VISION: frozenset({ToolId.VISION_CHECK_VERDICT}),
+    AgentId.AG02_KNOWLEDGE: _AG02_TOOLS,
+    AgentId.AG03_VISION: _AG03_TOOLS,
     AgentId.AG04_MARKET_DATA: frozenset({ToolId.FEATURES_COMPUTE}),
     AgentId.AG05_STRATEGY: frozenset({ToolId.STRATEGY_EVALUATE}),
     AgentId.AG06_RISK: frozenset({ToolId.RISK_ASSESS}),
@@ -38,8 +53,9 @@ AGENT_TOOL_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
     AgentId.AG09_DECISION_ML: frozenset({ToolId.ML_RANK}),
 }
 
-# Side effects the runtime will execute. Everything else fails closed.
+# Base side effects always allowed. EXTERNAL requires an explicit enable flag.
 ALLOWED_SIDE_EFFECTS = frozenset({"none", "read"})
+EXTERNAL_SIDE_EFFECT = "external"
 
 
 def allowed_tools(agent: AgentId) -> frozenset[ToolId]:
@@ -48,6 +64,12 @@ def allowed_tools(agent: AgentId) -> frozenset[ToolId]:
 
 def has_permission(agent: AgentId, tool: ToolId) -> bool:
     return tool in allowed_tools(agent)
+
+
+def allowed_side_effects(*, external_enabled: bool = False) -> frozenset[str]:
+    if external_enabled:
+        return ALLOWED_SIDE_EFFECTS | {EXTERNAL_SIDE_EFFECT}
+    return ALLOWED_SIDE_EFFECTS
 
 
 def permissions_matrix() -> dict[str, list[str]]:

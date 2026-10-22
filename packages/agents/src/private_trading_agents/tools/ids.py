@@ -17,6 +17,12 @@ class ToolId(StrEnum):
     VISION_CHECK_VERDICT = "vision.check_verdict"
     ML_RANK = "ml.rank"
 
+    # EXTERNAL tools — require agent_external_tools_enabled (or context override)
+    KNOWLEDGE_RETRIEVE = "knowledge.retrieve"
+    KNOWLEDGE_ASK = "knowledge.ask"
+    VISION_EXTRACT = "vision.extract"
+    LLM_NARRATE_FACTS = "llm.narrate_facts"
+
     # AG-01 routing tools only — call specialists, never raw engines
     AGENT_RUN_MARKET_DATA = "agent.run_market_data"
     AGENT_RUN_VISION = "agent.run_vision"
