@@ -7,20 +7,48 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
-from private_trading_decision.labels import FEATURE_NAMES
 from private_trading_decision.predict import LoadedModel
-from private_trading_features.engine import compute_feature
 from private_trading_features.types import CandleBar
 from private_trading_risk.assess import assess_risk
 from private_trading_risk.policy import default_policy_config
+from private_trading_risk.portfolio import (
+    OpenExposure,
+    PortfolioRiskInput,
+    assess_portfolio_risk,
+    specialist_risk_pct,
+)
 from private_trading_risk.types import Direction as RiskDirection
 from private_trading_risk.types import InstrumentRiskMeta, RiskInput
-from private_trading_strategies.context import DEFAULT_ENTRY_PATH, build_playbook_context
-from private_trading_strategies.evaluate import evaluate_strategy
+from private_trading_strategies.specialist_registry import ValidatedSpecialistModel
+from private_trading_strategies.specialists import SpecialistAction, SpecialistSignal
 from private_trading_strategies.types import Direction, SetupState
-from private_trading_strategies.wyckoff_hdm import build_wyckoff_hdm_v1
 
+from private_trading_agents.adapters import candles_to_models, feature_models_to_payload
+from private_trading_agents.contracts import (
+    AgentId,
+    AgentStep,
+    CitationModel,
+    DecisionActionName,
+    JournalAgentIn,
+    KnowledgeAgentIn,
+    MarketDataAgentIn,
+    OrchestratorAgentIn,
+    RiskAgentIn,
+    SignalAgentIn,
+    StrategyAgentIn,
+    VisionAgentIn,
+)
 from private_trading_agents.explain import grounded_explanation
+from private_trading_agents.roles import (
+    run_decision_ml_agent,
+    run_journal_agent,
+    run_knowledge_agent,
+    run_market_data_agent,
+    run_risk_agent,
+    run_signal_agent,
+    run_strategy_agent,
+    run_vision_agent,
+)
 from private_trading_agents.vision import VisionVerdict
 
 WORKFLOW_VERSION = "0.1.0"
@@ -34,11 +62,8 @@ class DecisionAction(StrEnum):
     NO_SETUP = "NO_SETUP"
 
 
-@dataclass(slots=True)
-class CitationRef:
-    citation_id: str
-    excerpt: str
-    document_id: str | None = None
+# Pydantic citation contract; keep name for callers/tests.
+CitationRef = CitationModel
 
 
 @dataclass(slots=True)
@@ -65,17 +90,6 @@ class DecisionSnapshot:
     evidence: dict[str, Any]
     workflow: list[dict[str, str]]
     hard_blockers: list[str] = field(default_factory=list)
-
-
-def _feature_payload(bars: list[CandleBar], index: int) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    for name in FEATURE_NAMES:
-        value = compute_feature(name, bars, index)
-        numeric = value.value
-        if isinstance(numeric, Decimal):
-            numeric = float(numeric)
-        payload[name] = {"status": value.status.value, "value": numeric, "reason": value.reason}
-    return payload
 
 
 def _confidence(
@@ -111,139 +125,133 @@ def run_decision_workflow(
     model_id: UUID | None = None,
     model_mode: str | None = None,
     min_rr: str = "2.0",
+    asset_class: str = "crypto",
     vision: VisionVerdict | None = None,
 ) -> DecisionSnapshot:
-    """AG-01 orchestrates AG-04, AG-05, AG-06, optional AG-09, then AG-02 explanation."""
-    index = len(bars) - 1 if bar_index is None else bar_index
-    bar = bars[index]
-    side = Direction(direction)
-    workflow: list[dict[str, str]] = [
-        {"agent": "AG-01", "status": "running", "note": "decision workflow"},
-        {
-            "agent": "AG-04",
-            "status": "ok",
-            "note": f"{symbol} {timeframe} bar {index} fresh={data_fresh}",
-        },
-        {
-            "agent": "AG-03",
-            "status": "skipped" if vision is None else vision.status,
-            "note": "vision not attached" if vision is None else "supporting evidence only",
-        },
-        {"agent": "AG-08", "status": "skipped", "note": "journal is a later phase"},
+    """AG-01 orchestrates independent Pydantic-validated AG-02..AG-09 roles."""
+    citation_models = [
+        CitationModel.model_validate(
+            item.model_dump() if hasattr(item, "model_dump") else item
+        )
+        for item in (citations or [])
     ]
-    features = _feature_payload(bars, index)
-    min_rr_dec = Decimal(min_rr)
-    ctx = build_playbook_context(
-        bars, index, direction=side, min_rr=min_rr_dec, entry_path=DEFAULT_ENTRY_PATH
-    )
-    entry = Decimal(str(ctx["_entry_ref"])) if ctx.get("_entry_ref") else None
-    stop = Decimal(str(ctx["_stop_price"])) if ctx.get("_stop_price") else None
-    target = None
-    if entry is not None and stop is not None:
-        risk = abs(entry - stop)
-        if risk > 0:
-            target = (
-                entry + risk * min_rr_dec if side == Direction.LONG else entry - risk * min_rr_dec
-            )
-    strategy = build_wyckoff_hdm_v1(
-        version_no=1, advisory_definitions=["WYK-001", "IMB-001", "SMT-001"]
-    )
-    assessment = evaluate_strategy(
-        strategy,
-        direction=side,
-        features=features,
-        context={k: v for k, v in ctx.items() if not k.startswith("_")},
-    )
-    workflow.append(
+    vision_in = None
+    if vision is not None:
+        vision_in = VisionAgentIn(
+            attached=True,
+            status=vision.status,
+            consistent=vision.consistent,
+            needs_clarification=vision.needs_clarification,
+            blocker=vision.blocker,
+        )
+    OrchestratorAgentIn.model_validate(
         {
-            "agent": "AG-05",
-            "status": "ok",
-            "note": f"setup_state={assessment.setup_state.value}",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "bars": candles_to_models(bars),
+            "bar_index": bar_index,
+            "direction": direction,
+            "data_fresh": data_fresh,
+            "market_actionable": market_actionable,
+            "position_state": position_state,
+            "citations": citation_models,
+            "min_rr": min_rr,
+            "asset_class": asset_class,
+            "model_id": model_id,
+            "model_mode": model_mode,
+            "model_present": model is not None,
+            "vision": vision_in,
         }
     )
 
-    hard_blockers = list(assessment.blockers)
-    if not data_fresh:
-        hard_blockers.append("stale_market_data")
-    if not market_actionable:
-        hard_blockers.append("market_not_actionable")
-    workflow.append(
-        {
-            "agent": "AG-07",
-            "status": "ok" if not hard_blockers else "blocked",
-            "note": "hard no-trade gates",
-        }
-    )
+    workflow: list[dict[str, str]] = [
+        AgentStep(
+            agent=AgentId.AG01_ORCHESTRATOR,
+            status="running",
+            note="decision workflow",
+        ).as_workflow_dict()
+    ]
 
-    risk = assess_risk(
-        policy_code="default-crypto",
-        policy_version_no=1,
-        policy_config=default_policy_config(),
-        risk_input=RiskInput(
-            direction=RiskDirection(side.value),
-            entry=entry,
-            stop=stop,
-            target_1=target,
+    market = run_market_data_agent(
+        MarketDataAgentIn(
+            symbol=symbol,
+            timeframe=timeframe,
+            bars=candles_to_models(bars),
             data_fresh=data_fresh,
             market_actionable=market_actionable,
-            account_equity=Decimal("10000"),
-            instrument=InstrumentRiskMeta(
-                asset_class="crypto",
-                price_tick=Decimal("0.01"),
-                qty_step=Decimal("0.001"),
-                min_notional=Decimal("10"),
-            ),
-        ),
+            bar_index=bar_index,
+        )
     )
-    for blocker in risk.hard_blockers:
-        if blocker not in hard_blockers:
-            hard_blockers.append(blocker)
-    workflow.append(
-        {
-            "agent": "AG-06",
-            "status": "approved" if risk.approved else "veto",
-            "note": "risk veto",
-        }
-    )
+    workflow.append(market.step.as_workflow_dict())
 
-    gates_open = (
-        data_fresh
-        and market_actionable
-        and assessment.setup_state == SetupState.READY_FOR_REVIEW
-        and risk.approved
+    vision_out = run_vision_agent(vision_in)
+    workflow.append(vision_out.step.as_workflow_dict())
+
+    journal_out = run_journal_agent(JournalAgentIn())
+    workflow.append(journal_out.step.as_workflow_dict())
+
+    strategy = run_strategy_agent(
+        StrategyAgentIn(
+            symbol=symbol,
+            timeframe=timeframe,
+            direction=direction,  # type: ignore[arg-type]
+            features=market.features,
+            bars=candles_to_models(bars),
+            bar_index=market.bar_index,
+            min_rr=Decimal(min_rr),
+            asset_class=asset_class,
+        )
     )
-    model_score: float | None = None
-    model_band: str | None = None
-    model_says_enter = False
-    if model is not None and gates_open:
-        ranked = model.decide(
-            features,
-            strategy_ready=True,
-            risk_approved=True,
-            mode=model_mode or "shadow",
+    workflow.append(strategy.step.as_workflow_dict())
+
+    signal = run_signal_agent(
+        SignalAgentIn(
+            setup_state=strategy.setup_state,
+            data_fresh=market.data_fresh,
+            market_actionable=market.market_actionable,
+            hard_blockers=list(strategy.blockers),
         )
-        model_score = ranked.score
-        model_band = ranked.band
-        model_says_enter = ranked.recommendation == "ENTER"
-        workflow.append(
-            {
-                "agent": "AG-09",
-                "status": "scored",
-                "note": f"band={model_band} mode={model_mode or 'shadow'}",
-            }
+    )
+    workflow.append(signal.step.as_workflow_dict())
+    hard_blockers = list(signal.hard_blockers)
+
+    risk = run_risk_agent(
+        RiskAgentIn(
+            direction=direction,  # type: ignore[arg-type]
+            entry=strategy.entry_price,
+            stop=strategy.stop_price,
+            target=strategy.target_price,
+            data_fresh=market.data_fresh,
+            market_actionable=market.market_actionable,
+            asset_class=asset_class,
+            prior_blockers=hard_blockers,
         )
-    else:
-        workflow.append(
-            {
-                "agent": "AG-09",
-                "status": "skipped",
-                "note": "ranker omitted or gates already closed",
-            }
-        )
+    )
+    workflow.append(risk.step.as_workflow_dict())
+    hard_blockers = list(risk.hard_blockers)
+
+    gates_open = signal.gates_open_candidate and risk.approved
+    ml = run_decision_ml_agent(
+        {
+            "features": market.features,
+            "gates_open": gates_open,
+            "model_mode": model_mode,
+            "model_present": model is not None,
+        },
+        model=model,
+    )
+    workflow.append(ml.step.as_workflow_dict())
+    model_score = ml.model_score
+    model_band = ml.model_band
+    model_says_enter = ml.recommends_enter
 
     if position_state == "open":
         action = DecisionAction.HOLD if gates_open else DecisionAction.EXIT
-    elif assessment.setup_state == SetupState.NO_SETUP and data_fresh and market_actionable:
+    elif (
+        strategy.setup_state == SetupState.NO_SETUP.value
+        and market.data_fresh
+        and market.market_actionable
+    ):
         action = DecisionAction.NO_SETUP
     elif not gates_open:
         action = DecisionAction.WAIT
@@ -253,10 +261,10 @@ def run_decision_workflow(
     else:
         action = DecisionAction.ENTER
 
-    if vision is not None and vision.needs_clarification and action == DecisionAction.ENTER:
+    if vision_out.needs_clarification and action == DecisionAction.ENTER:
         action = DecisionAction.WAIT
-        if vision.blocker and vision.blocker not in hard_blockers:
-            hard_blockers.append(vision.blocker)
+        if vision_out.blocker and vision_out.blocker not in hard_blockers:
+            hard_blockers.append(vision_out.blocker)
 
     band = _confidence(
         action=action,
@@ -264,23 +272,21 @@ def run_decision_workflow(
         model_band=model_band,
         model_mode=model_mode,
     )
-    citation_rows = [
-        {"citation_id": item.citation_id, "document_id": item.document_id, "excerpt": item.excerpt}
-        for item in (citations or [])
-    ]
+    features = feature_models_to_payload(market.features)
+    citation_rows = [item.model_dump() for item in citation_models]
     facts: dict[str, Any] = {
         "action": action.value,
         "symbol": symbol,
         "timeframe": timeframe,
-        "bar_open_time": bar.open_time.isoformat(),
-        "strategy_code": assessment.strategy_code,
-        "strategy_version_no": assessment.strategy_version_no,
-        "setup_state": assessment.setup_state.value,
+        "bar_open_time": market.bar_open_time.isoformat(),
+        "strategy_code": strategy.strategy_code,
+        "strategy_version_no": strategy.strategy_version_no,
+        "setup_state": strategy.setup_state,
         "hard_blockers": hard_blockers,
         "risk_approved": risk.approved,
-        "entry_price": entry if risk.entry_reference is None else risk.entry_reference,
-        "stop_price": risk.stop_price if risk.stop_price is not None else stop,
-        "target_price": risk.target_1 if risk.target_1 is not None else target,
+        "entry_price": risk.entry_price,
+        "stop_price": risk.stop_price,
+        "target_price": risk.target_price,
         "rr_ratio": risk.rr_ratio,
         "features": features,
         "citations": citation_rows,
@@ -290,23 +296,27 @@ def run_decision_workflow(
         "confidence_band": band,
         "extra_numbers": [min_rr],
     }
-    # Prefer the risk engine's own figures when it computed them.
-    if risk.entry_reference is not None:
-        facts["entry_price"] = risk.entry_reference
-    explanation = grounded_explanation(facts)
-    workflow.append({"agent": "AG-02", "status": "ok", "note": "grounded explanation"})
-    workflow[0] = {"agent": "AG-01", "status": "ok", "note": f"action={action.value}"}
+    knowledge = run_knowledge_agent(KnowledgeAgentIn(facts=facts, citations=citation_models))
+    workflow.append(knowledge.step.as_workflow_dict())
+    workflow[0] = AgentStep(
+        agent=AgentId.AG01_ORCHESTRATOR,
+        status="ok",
+        note=f"action={action.value}",
+    ).as_workflow_dict()
+
+    # Validate final orchestrator envelope (action name must be a known enum).
+    DecisionActionName(action.value)
 
     return DecisionSnapshot(
         symbol=symbol,
         timeframe=timeframe,
-        bar_open_time=bar.open_time,
+        bar_open_time=market.bar_open_time,
         action=action,
-        direction=side.value,
-        setup_state=assessment.setup_state.value,
+        direction=strategy.direction,
+        setup_state=strategy.setup_state,
         confidence_band=band,
-        strategy_code=assessment.strategy_code,
-        strategy_version_no=assessment.strategy_version_no,
+        strategy_code=strategy.strategy_code,
+        strategy_version_no=strategy.strategy_version_no,
         risk_approved=risk.approved,
         entry_price=facts["entry_price"],
         stop_price=facts["stop_price"],
@@ -315,14 +325,196 @@ def run_decision_workflow(
         model_id=model_id,
         model_score=model_score,
         model_band=model_band,
-        explanation=explanation,
-        explanation_source="deterministic",
+        explanation=knowledge.explanation,
+        explanation_source=knowledge.explanation_source,
         evidence={
             "features": features,
-            "strategy_blockers": list(assessment.blockers),
+            "strategy_blockers": list(strategy.blockers),
             "risk_blockers": list(risk.hard_blockers),
             "citations": citation_rows,
             "position_state": position_state,
+            "workflow_version": WORKFLOW_VERSION,
+            "contracts": "pydantic_v1",
+        },
+        workflow=workflow,
+        hard_blockers=hard_blockers,
+    )
+
+
+def run_specialist_decision(
+    bars: list[CandleBar],
+    *,
+    symbol: str,
+    timeframe: str,
+    asset_class: str,
+    model: ValidatedSpecialistModel,
+    signal: SpecialistSignal,
+    data_fresh: bool = True,
+    market_actionable: bool = True,
+    open_exposures: tuple[OpenExposure, ...] = (),
+    daily_realized_pnl_pct: Decimal = Decimal("0"),
+) -> DecisionSnapshot:
+    """Paper-only specialist path: plugin signal, trade risk, then portfolio veto."""
+    index = len(bars) - 1
+    bar = bars[index]
+    workflow: list[dict[str, str]] = [
+        {"agent": "AG-01", "status": "ok", "note": "specialist workflow"},
+        {"agent": "AG-04", "status": "ok", "note": f"{symbol} {timeframe}"},
+        {
+            "agent": "AG-05",
+            "status": "ok" if signal.action == SpecialistAction.ENTER else "wait",
+            "note": signal.reason or signal.family.value,
+        },
+    ]
+    hard_blockers: list[str] = []
+    if not data_fresh:
+        hard_blockers.append("stale_market_data")
+    if not market_actionable:
+        hard_blockers.append("market_not_actionable")
+    if signal.action != SpecialistAction.ENTER:
+        hard_blockers.append(signal.reason or "specialist_wait")
+
+    entry = signal.entry_reference
+    stop = signal.stop_price
+    target = signal.target_price
+    side = Direction(signal.direction or "long")
+
+    proposed_risk = specialist_risk_pct(
+        objective=model.objective.value,
+        mean_r=model.validation.mean_r,
+        max_drawdown_r=model.validation.max_drawdown_r,
+    )
+    risk = assess_risk(
+        policy_code=f"specialist-{asset_class}",
+        policy_version_no=1,
+        policy_config=default_policy_config(
+            asset_class=asset_class,
+            min_rr=float(model.config.rr),
+            max_risk_pct=float(proposed_risk) if proposed_risk > 0 else 0.1,
+        ),
+        risk_input=RiskInput(
+            direction=RiskDirection(side.value),
+            entry=entry,
+            stop=stop,
+            target_1=target,
+            data_fresh=data_fresh,
+            market_actionable=market_actionable,
+            account_equity=Decimal("10000"),
+            open_risk_pct=sum(
+                (item.risk_pct for item in open_exposures),
+                Decimal("0"),
+            )
+            + proposed_risk,
+            instrument=InstrumentRiskMeta(
+                asset_class=asset_class,
+                price_tick=(
+                    Decimal("0.00001") if asset_class == "forex" else Decimal("0.01")
+                ),
+                qty_step=Decimal("0.01") if asset_class == "forex" else Decimal("0.001"),
+                min_notional=Decimal("0") if asset_class == "forex" else Decimal("10"),
+            ),
+        ),
+    )
+    for blocker in risk.hard_blockers:
+        if blocker not in hard_blockers:
+            hard_blockers.append(blocker)
+    portfolio = assess_portfolio_risk(
+        PortfolioRiskInput(
+            proposed_symbol=symbol,
+            proposed_asset_class=asset_class,
+            proposed_direction=side.value,
+            proposed_risk_pct=proposed_risk,
+            open_exposures=open_exposures,
+            daily_realized_pnl_pct=daily_realized_pnl_pct,
+        )
+    )
+    for blocker in portfolio.blockers:
+        if blocker not in hard_blockers:
+            hard_blockers.append(blocker)
+    workflow.extend(
+        [
+            {
+                "agent": "AG-06",
+                "status": "approved" if risk.approved and portfolio.approved else "veto",
+                "note": "trade and portfolio risk",
+            },
+            {"agent": "AG-09", "status": "skipped", "note": "specialist registry, no ML override"},
+        ]
+    )
+    approved = (
+        data_fresh
+        and market_actionable
+        and signal.action == SpecialistAction.ENTER
+        and risk.approved
+        and portfolio.approved
+        and proposed_risk > 0
+        and model.paper_only
+        and not model.live_alerts_allowed
+    )
+    action = DecisionAction.ENTER if approved else DecisionAction.WAIT
+    if not model.paper_only or model.live_alerts_allowed:
+        action = DecisionAction.WAIT
+        hard_blockers.append("specialist_not_paper_only")
+    facts: dict[str, Any] = {
+        "action": action.value,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "bar_open_time": bar.open_time.isoformat(),
+        "strategy_code": model.config.code,
+        "strategy_version_no": 1,
+        "setup_state": "ready_for_review" if approved else "wait",
+        "hard_blockers": hard_blockers,
+        "risk_approved": approved,
+        "entry_price": entry,
+        "stop_price": stop,
+        "target_price": target,
+        "rr_ratio": risk.rr_ratio,
+        "features": {},
+        "citations": [],
+        "model_score": None,
+        "model_band": None,
+        "model_invoked": False,
+        "confidence_band": "medium" if approved else "low",
+        "extra_numbers": [str(model.config.rr)],
+    }
+    explanation = grounded_explanation(facts)
+    workflow.append({"agent": "AG-02", "status": "ok", "note": "grounded explanation"})
+    return DecisionSnapshot(
+        symbol=symbol,
+        timeframe=timeframe,
+        bar_open_time=bar.open_time,
+        action=action,
+        direction=side.value,
+        setup_state=str(facts["setup_state"]),
+        confidence_band=str(facts["confidence_band"]),
+        strategy_code=model.config.code,
+        strategy_version_no=1,
+        risk_approved=approved,
+        entry_price=entry,
+        stop_price=stop,
+        target_price=target,
+        rr_ratio=risk.rr_ratio,
+        model_id=None,
+        model_score=None,
+        model_band=None,
+        explanation=explanation,
+        explanation_source="deterministic",
+        evidence={
+            "specialist": {
+                "family": signal.family.value,
+                "reason": signal.reason,
+                "paper_only": model.paper_only,
+                "live_alerts_allowed": False,
+                "partial_profit_at_r": (
+                    None
+                    if model.config.partial_at_r is None
+                    else float(model.config.partial_at_r)
+                ),
+                "partial_profit_fraction": float(model.config.partial_fraction),
+                "max_bars_in_trade": model.config.max_bars,
+            },
+            "portfolio_blockers": list(portfolio.blockers),
+            "risk_blockers": list(risk.hard_blockers),
             "workflow_version": WORKFLOW_VERSION,
         },
         workflow=workflow,

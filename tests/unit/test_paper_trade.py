@@ -4,12 +4,18 @@ from decimal import Decimal
 from private_trading_features.types import CandleBar
 from private_trading_paper_trade.engine import (
     PaperPlan,
+    ScaleOutState,
     evaluate_exit_on_bar,
+    evaluate_scale_out_on_bar,
     timeout_exit,
     try_fill_at_next_open,
     validate_plan,
 )
-from private_trading_paper_trade.fill_model import PAPER_LABEL, default_fill_model
+from private_trading_paper_trade.fill_model import (
+    PAPER_LABEL,
+    default_fill_model,
+    soak_fill_diagnostics,
+)
 
 
 def _bar(i: int, *, o="100", h="110", low="90", c="105", base=None) -> CandleBar:
@@ -83,6 +89,16 @@ def test_entry_fill_is_adverse_for_long() -> None:
     )
     assert filled.filled is True
     assert filled.entry_price is not None and filled.entry_price > Decimal("100")
+    assert filled.raw_open == Decimal("100")
+    report = soak_fill_diagnostics(
+        direction="long",
+        planned_entry=Decimal("100"),
+        raw_open=filled.raw_open,
+        filled_price=filled.entry_price,
+        fill_model=default_fill_model(research_pair_fill_bps="8"),
+    )
+    extra = Decimal(report["extra_cost_bps_vs_research"])
+    assert extra < Decimal("2")
 
 
 def test_same_candle_stop_and_target_prefers_stop() -> None:
@@ -184,3 +200,57 @@ def test_short_same_candle_also_conservative() -> None:
     )
     assert outcome.exit_reason == "stop_target_same_bar_conservative"
     assert outcome.exit_price == Decimal("108")
+
+
+def test_scale_out_takes_half_profit_then_moves_stop_to_breakeven() -> None:
+    entry_time = datetime(2024, 1, 1, 1, tzinfo=UTC)
+    model = default_fill_model(
+        fee_bps="0",
+        slippage_bps="0",
+        spread_bps="0",
+        max_bars_in_trade=80,
+    )
+    state = ScaleOutState(
+        remaining_qty=Decimal("2"),
+        current_stop=Decimal("90"),
+    )
+    partial = evaluate_scale_out_on_bar(
+        _bar(2, o="100", h="113", low="99", c="110"),
+        direction="long",
+        entry_price=Decimal("100"),
+        original_stop=Decimal("90"),
+        runner_target=Decimal("140"),
+        partial_at_r=Decimal("1.25"),
+        partial_fraction=Decimal("0.5"),
+        move_stop_to_breakeven=True,
+        invalidation=None,
+        entry_bar_open_time=entry_time,
+        fill_model=model,
+        original_qty=Decimal("2"),
+        state=state,
+        bars_held=1,
+    )
+    assert partial.event == "partial_profit"
+    assert partial.outcome.closed is False
+    assert partial.state.remaining_qty == Decimal("1.0")
+    assert partial.state.current_stop == Decimal("100")
+
+    closed = evaluate_scale_out_on_bar(
+        _bar(3, o="100", h="101", low="99", c="100"),
+        direction="long",
+        entry_price=Decimal("100"),
+        original_stop=Decimal("90"),
+        runner_target=Decimal("140"),
+        partial_at_r=Decimal("1.25"),
+        partial_fraction=Decimal("0.5"),
+        move_stop_to_breakeven=True,
+        invalidation=None,
+        entry_bar_open_time=entry_time,
+        fill_model=model,
+        original_qty=Decimal("2"),
+        state=partial.state,
+        bars_held=2,
+    )
+    assert closed.outcome.closed is True
+    assert closed.outcome.exit_reason == "stop"
+    assert closed.outcome.realized_r == Decimal("0.625")

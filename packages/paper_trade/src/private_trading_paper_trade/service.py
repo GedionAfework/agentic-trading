@@ -10,12 +10,32 @@ from typing import Any
 from private_trading_core.errors import AppError, NotFoundError
 from private_trading_db.models.decision_record import DecisionRecord
 from private_trading_db.models.market import Candle, Instrument
-from private_trading_db.models.ops import OutboxEvent
+from private_trading_db.models.ops import OutboxEvent, SystemSetting
 from private_trading_db.models.paper import PaperAccount, PaperTrade, PaperTradeEvent
 from private_trading_db.models.scanner import SignalCandidate
 from private_trading_features.types import CandleBar
 from private_trading_journal.service import create_paper_journal_entry
+from private_trading_risk.portfolio import (
+    OpenExposure,
+    PortfolioRiskInput,
+    assess_portfolio_risk,
+)
 from private_trading_risk.sizing import paper_quantity
+from private_trading_strategies.soak_freeze import (
+    SOAK_FILL_MODEL,
+    SOAK_RESEARCH_MEAN_R,
+    SOAK_RESEARCH_WIN_RATE,
+    SOAK_STEP1_MIN_CLOSED_TRADES,
+    SOAK_STEP2_MAX_DRAWDOWN_R,
+    SOAK_STEP2_MAX_EXTRA_COST_BPS,
+    SOAK_STEP2_MIN_CLOSED_TRADES,
+    SOAK_STEP2_MIN_MEAN_R,
+    SOAK_STEP2_MIN_POSITIVE_MONTH_FRACTION,
+    SOAK_STEP2_MIN_PROFIT_FACTOR,
+    SOAK_STEP2_MIN_TRADES_PER_MONTH,
+    SOAK_SYMBOL,
+    soak_incumbent,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +45,9 @@ from private_trading_paper_trade.engine import (
     STATUS_OPEN,
     STATUS_READY,
     PaperPlan,
+    ScaleOutState,
     evaluate_exit_on_bar,
+    evaluate_scale_out_on_bar,
     journal_summary,
     timeout_exit,
     try_fill_at_next_open,
@@ -35,7 +57,14 @@ from private_trading_paper_trade.fill_model import (
     PAPER_LABEL,
     default_fill_model,
     risk_pct,
+    soak_fill_diagnostics,
 )
+from private_trading_paper_trade.holdout import evaluate_holdout_review
+from private_trading_paper_trade.live_alert_gate import evaluate_live_alert_decision
+from private_trading_paper_trade.promotion import evaluate_paper_promotion
+from private_trading_paper_trade.soak_metrics import ClosedSoakTrade, evaluate_soak_sample
+
+SOAK_LIVE_ALERT_OWNER_UNLOCK_KEY = "soak_live_alert_owner_unlock"
 
 DEFAULT_STARTING_EQUITY = Decimal("10000")
 
@@ -187,6 +216,62 @@ async def plan_from_decision(
             retryable=False,
         )
     fill_model = dict(account.fill_model or default_fill_model())
+    if record.symbol == SOAK_SYMBOL:
+        notes = list(fill_model.get("notes") or [])
+        soak_notes = list(SOAK_FILL_MODEL.get("notes") or [])
+        fill_model.update(
+            {key: value for key, value in SOAK_FILL_MODEL.items() if key != "notes"}
+        )
+        fill_model["notes"] = notes + [note for note in soak_notes if note not in notes]
+        fill_model["soak_freeze_model"] = soak_incumbent().code
+    exposures, daily_pnl = await paper_portfolio_state(
+        session, owner_user_id=account.owner_user_id
+    )
+    asset_class = "crypto" if record.symbol.endswith("/USDT") else "forex"
+    portfolio = assess_portfolio_risk(
+        PortfolioRiskInput(
+            proposed_symbol=record.symbol,
+            proposed_asset_class=asset_class,
+            proposed_direction=record.direction,
+            proposed_risk_pct=risk_pct(fill_model),
+            open_exposures=exposures,
+            daily_realized_pnl_pct=daily_pnl,
+        )
+    )
+    if not portfolio.approved:
+        raise AppError(
+            "PAPER_PORTFOLIO_VETO",
+            "Paper trade refused by portfolio risk: " + ", ".join(portfolio.blockers),
+            retryable=False,
+            details={"blockers": portfolio.blockers},
+        )
+    paper_model = dict(record.evidence or {}).get("paper_model")
+    if isinstance(paper_model, dict):
+        if not paper_model.get("paper_only") or paper_model.get("live_alerts_allowed"):
+            raise AppError(
+                "PAPER_MODEL_NOT_SAFE",
+                "Model metadata does not enforce paper-only execution",
+                retryable=False,
+            )
+        fill_model.update(
+            {
+                "paper_model_code": paper_model.get("code"),
+                "paper_model_version": paper_model.get("version_no"),
+                "partial_profit_at_r": paper_model.get("partial_profit_at_r"),
+                "partial_profit_fraction": paper_model.get(
+                    "partial_profit_fraction", 0
+                ),
+                "move_stop_to_breakeven_after_partial": paper_model.get(
+                    "move_stop_to_breakeven_after_partial", False
+                ),
+                "original_stop_price": str(record.stop_price),
+                "max_bars_in_trade": paper_model.get(
+                    "max_bars_in_trade",
+                    fill_model.get("max_bars_in_trade", 20),
+                ),
+                "live_alerts_allowed": False,
+            }
+        )
     equity = _d(account.equity)
     qty, _notional, notes = paper_quantity(
         equity=equity,
@@ -385,7 +470,25 @@ async def _close_trade(
         realized_r=realized_r,
         realized_pnl=realized_pnl,
     )
-    journal = await create_paper_journal_entry(session, trade=trade, summary=summary)
+    fill_model = dict(trade.fill_model or {})
+    soak = dict(fill_model.get("soak_fill") or {})
+    journal = await create_paper_journal_entry(
+        session,
+        trade=trade,
+        summary=summary,
+        details={
+            "signal_bar_open_time": trade.signal_bar_open_time.isoformat(),
+            "entry_bar_open_time": (
+                None
+                if trade.entry_bar_open_time is None
+                else trade.entry_bar_open_time.isoformat()
+            ),
+            "paper_model_code": fill_model.get("paper_model_code"),
+            "exit_reason": exit_reason,
+            "realized_r": str(realized_r),
+            **soak,
+        },
+    )
     trade.journal_entry_id = journal.id
     session.add(
         OutboxEvent(
@@ -425,6 +528,16 @@ async def _advance_trade(session: AsyncSession, *, trade: PaperTrade) -> dict[st
         trade.status = STATUS_OPEN
         trade.entry_price = _f(fill.entry_price)
         trade.entry_bar_open_time = fill.entry_bar_open_time
+        diagnostics = soak_fill_diagnostics(
+            direction=trade.direction,
+            planned_entry=_d(trade.planned_entry),
+            raw_open=fill.raw_open,
+            filled_price=_d(fill.entry_price),
+            fill_model=dict(trade.fill_model or {}),
+        )
+        merged = dict(trade.fill_model or {})
+        merged["soak_fill"] = diagnostics
+        trade.fill_model = merged
         await _emit(
             session,
             trade_id=trade.id,
@@ -432,8 +545,10 @@ async def _advance_trade(session: AsyncSession, *, trade: PaperTrade) -> dict[st
             bar_open_time=fill.entry_bar_open_time,
             payload={
                 "entry_price": str(fill.entry_price),
+                "raw_open": None if fill.raw_open is None else str(fill.raw_open),
                 "label": PAPER_LABEL,
                 "note": fill.note,
+                "soak_fill": diagnostics,
             },
         )
         # Continue with management on subsequent bars in the same batch.
@@ -454,32 +569,90 @@ async def _advance_trade(session: AsyncSession, *, trade: PaperTrade) -> dict[st
     qty = _d(trade.qty)
     bars_held = trade.bars_held
     for bar in bars:
+        last_managed = fill_model.get("last_managed_bar")
+        if last_managed and bar.open_time.isoformat() <= str(last_managed):
+            continue
         bars_held += 1
         trade.bars_held = bars_held
-        outcome = evaluate_exit_on_bar(
-            bar,
-            direction=trade.direction,
-            entry_price=entry,
-            stop=stop,
-            target=target,
-            invalidation=invalidation,
-            entry_bar_open_time=trade.entry_bar_open_time,
-            fill_model=fill_model,
-            qty=qty,
-        )
-        if not outcome.closed:
-            timed = timeout_exit(
+        partial_at = fill_model.get("partial_profit_at_r")
+        partial_fraction = _d(fill_model.get("partial_profit_fraction") or 0)
+        if partial_at is not None and Decimal("0") < partial_fraction < Decimal("1"):
+            stored_state = dict(fill_model.get("scale_out_state") or {})
+            state = ScaleOutState(
+                remaining_qty=_d(stored_state.get("remaining_qty", qty)),
+                current_stop=_d(stored_state.get("current_stop", stop)),
+                realized_pnl=_d(stored_state.get("realized_pnl", 0)),
+                costs=_d(stored_state.get("costs", 0)),
+                partial_taken=bool(stored_state.get("partial_taken", False)),
+            )
+            managed = evaluate_scale_out_on_bar(
+                bar,
+                direction=trade.direction,
+                entry_price=entry,
+                original_stop=_d(fill_model.get("original_stop_price", stop)),
+                runner_target=target,
+                partial_at_r=_d(partial_at),
+                partial_fraction=partial_fraction,
+                move_stop_to_breakeven=bool(
+                    fill_model.get("move_stop_to_breakeven_after_partial")
+                ),
+                invalidation=invalidation,
+                entry_bar_open_time=trade.entry_bar_open_time,
+                fill_model=fill_model,
+                original_qty=qty,
+                state=state,
+                bars_held=bars_held,
+            )
+            fill_model["scale_out_state"] = {
+                "remaining_qty": str(managed.state.remaining_qty),
+                "current_stop": str(managed.state.current_stop),
+                "realized_pnl": str(managed.state.realized_pnl),
+                "costs": str(managed.state.costs),
+                "partial_taken": managed.state.partial_taken,
+            }
+            fill_model["last_managed_bar"] = bar.open_time.isoformat()
+            trade.fill_model = dict(fill_model)
+            trade.stop_price = _f(managed.state.current_stop)
+            if managed.event == "partial_profit":
+                await _emit(
+                    session,
+                    trade_id=trade.id,
+                    event_type="partial_profit",
+                    bar_open_time=bar.open_time,
+                    payload={
+                        "remaining_qty": str(managed.state.remaining_qty),
+                        "stop_price": str(managed.state.current_stop),
+                        "label": PAPER_LABEL,
+                    },
+                )
+            outcome = managed.outcome
+            if not outcome.closed:
+                continue
+        else:
+            outcome = evaluate_exit_on_bar(
                 bar,
                 direction=trade.direction,
                 entry_price=entry,
                 stop=stop,
+                target=target,
+                invalidation=invalidation,
+                entry_bar_open_time=trade.entry_bar_open_time,
                 fill_model=fill_model,
                 qty=qty,
-                bars_held=bars_held,
             )
-            if timed is None:
-                continue
-            outcome = timed
+            if not outcome.closed:
+                timed = timeout_exit(
+                    bar,
+                    direction=trade.direction,
+                    entry_price=entry,
+                    stop=stop,
+                    fill_model=fill_model,
+                    qty=qty,
+                    bars_held=bars_held,
+                )
+                if timed is None:
+                    continue
+                outcome = timed
         assert outcome.exit_price is not None and outcome.realized_pnl is not None
         assert outcome.realized_r is not None and outcome.exit_reason is not None
         assert outcome.exit_bar_open_time is not None
@@ -520,6 +693,43 @@ async def monitor_account(
             counts["unchanged"] += 1
     await session.commit()
     return {"processed": len(trades), **counts}
+
+
+async def paper_portfolio_state(
+    session: AsyncSession,
+    *,
+    owner_user_id: uuid.UUID | None,
+) -> tuple[tuple[OpenExposure, ...], Decimal]:
+    if owner_user_id is None:
+        return (), Decimal("0")
+    open_rows = await session.execute(
+        select(PaperTrade).where(
+            PaperTrade.owner_user_id == owner_user_id,
+            PaperTrade.status.in_((STATUS_READY, STATUS_OPEN)),
+        )
+    )
+    exposures = tuple(
+        OpenExposure(
+            symbol=row.instrument_symbol,
+            asset_class="crypto" if row.instrument_symbol.endswith("/USDT") else "forex",
+            direction=row.direction,
+            risk_pct=risk_pct(dict(row.fill_model or default_fill_model())),
+        )
+        for row in open_rows.scalars().all()
+    )
+    start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    closed = await session.execute(
+        select(func.coalesce(func.sum(PaperTrade.realized_pnl), 0)).where(
+            PaperTrade.owner_user_id == owner_user_id,
+            PaperTrade.status == STATUS_CLOSED,
+            PaperTrade.closed_at >= start,
+        )
+    )
+    pnl = _d(closed.scalar_one())
+    account = await get_account(session, owner_user_id=owner_user_id)
+    equity = _d(account.starting_equity) if account is not None else Decimal("0")
+    daily_pct = (pnl / equity * Decimal("100")) if equity > 0 else Decimal("0")
+    return exposures, daily_pct
 
 
 async def list_trades(
@@ -613,8 +823,138 @@ async def account_summary(
         "closed_trades": int(closed_count),
         "sum_realized_r": str(sum_r),
         "soak": soak_status(account),
+        "soak_step1": await soak_step1_progress(session, owner_user_id=owner_user_id),
+        "soak_step2": await soak_step2_progress(session, owner_user_id=owner_user_id),
+        "soak_step3": await soak_step3_progress(session, owner_user_id=owner_user_id),
+        "soak_step4": await soak_step4_progress(session, owner_user_id=owner_user_id),
+        "soak_step5": await soak_step5_progress(session, owner_user_id=owner_user_id),
         "integrity": integrity,
     }
+
+
+async def _closed_soak_trades(
+    session: AsyncSession, *, owner_user_id: uuid.UUID
+) -> list[ClosedSoakTrade]:
+    rows = await session.execute(
+        select(PaperTrade).where(
+            PaperTrade.owner_user_id == owner_user_id,
+            PaperTrade.instrument_symbol == SOAK_SYMBOL,
+            PaperTrade.status == STATUS_CLOSED,
+        )
+    )
+    closed: list[ClosedSoakTrade] = []
+    for trade in rows.scalars().all():
+        if trade.realized_r is None:
+            continue
+        extra = dict(trade.fill_model or {}).get("soak_fill", {}).get(
+            "extra_cost_bps_vs_research"
+        )
+        closed.append(
+            ClosedSoakTrade(
+                realized_r=float(trade.realized_r),
+                closed_at=trade.closed_at or trade.exit_bar_open_time,
+                extra_cost_bps_vs_research=(
+                    None if extra is None else float(extra)
+                ),
+            )
+        )
+    return closed
+
+
+async def soak_step1_progress(
+    session: AsyncSession, *, owner_user_id: uuid.UUID
+) -> dict[str, Any]:
+    sample = evaluate_soak_sample(
+        await _closed_soak_trades(session, owner_user_id=owner_user_id),
+        min_closed_trades=SOAK_STEP1_MIN_CLOSED_TRADES,
+        min_mean_r=0.0,
+        min_profit_factor=1.0,
+        max_drawdown_r_limit=SOAK_STEP2_MAX_DRAWDOWN_R,
+        min_positive_month_fraction=0.0,
+        min_trades_per_month=1,
+        max_extra_cost_bps=SOAK_STEP2_MAX_EXTRA_COST_BPS,
+        research_mean_r=SOAK_RESEARCH_MEAN_R,
+        research_win_rate=SOAK_RESEARCH_WIN_RATE,
+    )
+    trades = int(sample["closed_trades"])
+    mean_r = float(sample["mean_r"])
+    return {
+        "symbol": SOAK_SYMBOL,
+        "closed_trades": trades,
+        "min_closed_trades": SOAK_STEP1_MIN_CLOSED_TRADES,
+        "win_rate": sample["win_rate"],
+        "mean_r": mean_r,
+        "max_drawdown_r": sample["max_drawdown_r"],
+        "avg_extra_cost_bps_vs_research": sample["avg_extra_cost_bps_vs_research"],
+        "research_mean_r": SOAK_RESEARCH_MEAN_R,
+        "research_win_rate": SOAK_RESEARCH_WIN_RATE,
+        "step1_complete": trades >= SOAK_STEP1_MIN_CLOSED_TRADES,
+        "continue_soak": trades >= SOAK_STEP1_MIN_CLOSED_TRADES and mean_r > 0,
+    }
+
+
+async def soak_step2_progress(
+    session: AsyncSession, *, owner_user_id: uuid.UUID
+) -> dict[str, Any]:
+    sample = evaluate_soak_sample(
+        await _closed_soak_trades(session, owner_user_id=owner_user_id),
+        min_closed_trades=SOAK_STEP2_MIN_CLOSED_TRADES,
+        min_mean_r=SOAK_STEP2_MIN_MEAN_R,
+        min_profit_factor=SOAK_STEP2_MIN_PROFIT_FACTOR,
+        max_drawdown_r_limit=SOAK_STEP2_MAX_DRAWDOWN_R,
+        min_positive_month_fraction=SOAK_STEP2_MIN_POSITIVE_MONTH_FRACTION,
+        min_trades_per_month=SOAK_STEP2_MIN_TRADES_PER_MONTH,
+        max_extra_cost_bps=SOAK_STEP2_MAX_EXTRA_COST_BPS,
+        research_mean_r=SOAK_RESEARCH_MEAN_R,
+        research_win_rate=SOAK_RESEARCH_WIN_RATE,
+    )
+    return {
+        "symbol": SOAK_SYMBOL,
+        "model_code": soak_incumbent().code,
+        "objective": soak_incumbent().objective.value,
+        **sample,
+        "step2_complete": bool(sample["all_gates_passed"]),
+        "ready_for_holdout_review": bool(sample["all_gates_passed"]),
+        "note": (
+            "Step 2 uses only closed SOL paper trades on the frozen V1 model. "
+            "Do not retune 2022–2026 to pass these gates."
+        ),
+    }
+
+
+async def soak_step3_progress(
+    session: AsyncSession, *, owner_user_id: uuid.UUID
+) -> dict[str, Any]:
+    step2 = await soak_step2_progress(session, owner_user_id=owner_user_id)
+    return evaluate_holdout_review(
+        await _closed_soak_trades(session, owner_user_id=owner_user_id),
+        step2_complete=bool(step2["step2_complete"]),
+    )
+
+
+async def soak_step4_progress(
+    session: AsyncSession, *, owner_user_id: uuid.UUID
+) -> dict[str, Any]:
+    return evaluate_paper_promotion(
+        await soak_step3_progress(session, owner_user_id=owner_user_id)
+    )
+
+
+async def _owner_live_alert_unlock(session: AsyncSession) -> bool:
+    row = await session.get(SystemSetting, SOAK_LIVE_ALERT_OWNER_UNLOCK_KEY)
+    if row is None or not isinstance(row.value, dict):
+        return False
+    return bool(row.value.get("enabled"))
+
+
+async def soak_step5_progress(
+    session: AsyncSession, *, owner_user_id: uuid.UUID
+) -> dict[str, Any]:
+    # Owner unlock is a global system setting; step4 still uses this account.
+    return evaluate_live_alert_decision(
+        await soak_step4_progress(session, owner_user_id=owner_user_id),
+        owner_unlock=await _owner_live_alert_unlock(session),
+    )
 
 
 async def integrity_report(

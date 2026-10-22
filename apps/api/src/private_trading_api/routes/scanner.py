@@ -12,8 +12,12 @@ from private_trading_agents.scanner_service import (
 )
 from private_trading_core.config import Settings, get_settings
 from private_trading_db.services.audit import record_audit
-from private_trading_market_data.catalog import ensure_binance_catalog
+from private_trading_market_data.catalog import (
+    ensure_binance_catalog,
+    ensure_forex_catalog,
+)
 from private_trading_market_data.providers import BinanceSpotProvider
+from private_trading_strategies.multi_market import TradingObjective
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from private_trading_api.deps import CurrentUser, get_correlation_id, get_current_user, get_db
@@ -47,12 +51,17 @@ async def post_run(
 ) -> ScanResponse:
     user.require_roles("owner", "admin")
     await ensure_binance_catalog(session)
+    if body.objective is not None:
+        await ensure_forex_catalog(session)
     await session.commit()
     runs = await scan_all(
         session,
         timeframes=_timeframes(settings, body.timeframes),
         owner_user_id=user.id,
         symbols=tuple(body.symbols) or None,
+        objective=(
+            None if body.objective is None else TradingObjective(body.objective)
+        ),
     )
     await record_audit(
         session,

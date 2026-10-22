@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class ScanRequest(BaseModel):
     symbols: list[str] = Field(default_factory=list)
     timeframes: list[str] = Field(default_factory=list)
+    objective: Literal["profit", "win_rate"] | None = None
 
 
 class ScanRunOut(BaseModel):

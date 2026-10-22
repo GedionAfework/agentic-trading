@@ -23,6 +23,11 @@ class PaperAccountOut(BaseModel):
     closed_trades: int
     sum_realized_r: str
     soak: dict[str, Any]
+    soak_step1: dict[str, Any] = Field(default_factory=dict)
+    soak_step2: dict[str, Any] = Field(default_factory=dict)
+    soak_step3: dict[str, Any] = Field(default_factory=dict)
+    soak_step4: dict[str, Any] = Field(default_factory=dict)
+    soak_step5: dict[str, Any] = Field(default_factory=dict)
     integrity: dict[str, Any]
 
 

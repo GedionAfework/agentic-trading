@@ -6,14 +6,25 @@ from time import perf_counter
 from typing import Any
 
 from private_trading_core.config import get_settings
+from private_trading_core.errors import AppError
 from private_trading_db.models.identity import User, UserRole
 from private_trading_db.models.market import Candle, Instrument
 from private_trading_db.models.ops import OutboxEvent, SystemSetting
 from private_trading_db.models.scanner import ScanRun, SignalCandidate
 from private_trading_features.types import CandleBar
-from private_trading_market_data.catalog import list_enabled_instruments
+from private_trading_market_data.catalog import (
+    get_instrument_by_symbol,
+    list_enabled_instruments,
+)
 from private_trading_market_data.health import instrument_snapshot
+from private_trading_paper_trade.service import accept_decision, paper_portfolio_state
 from private_trading_release.service import evaluate_for_candidate
+from private_trading_strategies.multi_market import TradingObjective
+from private_trading_strategies.soak_freeze import (
+    assert_soak_freeze,
+    soak_scan_symbols,
+    soak_scan_timeframes,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +33,8 @@ from private_trading_agents.scanner import (
     ScanOutcome,
     candidate_payload,
     evaluate_closed_candle,
+    evaluate_specialist_closed_candle,
+    should_auto_open_paper,
 )
 from private_trading_agents.service import persist_decision
 
@@ -127,6 +140,7 @@ async def _register_candidate(
     timeframe: str,
     outcome: ScanOutcome,
     notifications_enabled: bool,
+    force_paper_only: bool = False,
 ) -> tuple[SignalCandidate, bool]:
     assert outcome.snapshot is not None and outcome.dedupe_key is not None
     result = await session.execute(
@@ -141,16 +155,25 @@ async def _register_candidate(
         return existing, False
 
     record = await persist_decision(session, owner_user_id=owner_user_id, snapshot=outcome.snapshot)
-    gate = await evaluate_for_candidate(
-        session,
-        owner_user_id=owner_user_id,
-        symbol=symbol,
-        timeframe=timeframe,
-        action=outcome.snapshot.action.value,
-        confidence_band=outcome.snapshot.confidence_band,
-        risk_approved=bool(outcome.snapshot.risk_approved),
-        notifications_enabled=notifications_enabled,
-        now=now,
+    gate = (
+        {
+            "allow": False,
+            "publish_state": "paper_only",
+            "mode": "paper",
+            "reasons": ["paper_only_model"],
+        }
+        if force_paper_only
+        else await evaluate_for_candidate(
+            session,
+            owner_user_id=owner_user_id,
+            symbol=symbol,
+            timeframe=timeframe,
+            action=outcome.snapshot.action.value,
+            confidence_band=outcome.snapshot.confidence_band,
+            risk_approved=bool(outcome.snapshot.risk_approved),
+            notifications_enabled=notifications_enabled,
+            now=now,
+        )
     )
     publish_state = str(gate["publish_state"])
     candidate = SignalCandidate(
@@ -206,6 +229,7 @@ async def scan_instrument_timeframe(
     timeframe: str,
     owner_user_id: uuid.UUID | None = None,
     now: datetime | None = None,
+    objective: TradingObjective | None = None,
 ) -> ScanRun | dict[str, Any]:
     started = perf_counter()
     switches = await get_kill_switches(session)
@@ -236,18 +260,57 @@ async def scan_instrument_timeframe(
         details={"quality_flags": snapshot.quality_flags, "scanner_version": SCANNER_VERSION},
     )
     try:
-        outcome = evaluate_closed_candle(
-            bars,
-            symbol=symbol,
-            timeframe=timeframe,
-            fresh=snapshot.fresh,
-            actionable=snapshot.actionable,
-        )
+        if objective is None:
+            outcome = evaluate_closed_candle(
+                bars,
+                symbol=symbol,
+                timeframe=timeframe,
+                fresh=snapshot.fresh,
+                actionable=snapshot.actionable,
+            )
+        elif timeframe != "1h":
+            outcome = ScanOutcome(
+                status="unsupported_multi_market_timeframe",
+                fresh=snapshot.fresh,
+                actionable=snapshot.actionable,
+                action="WAIT",
+                notes=["multi_market_entry_timeframe=1h"],
+            )
+        else:
+            higher_timeframe = "4h" if instrument.asset_class == "crypto" else "1d"
+            higher_bars = await load_final_bars(
+                session,
+                instrument_id=instrument.id,
+                timeframe=higher_timeframe,
+            )
+            benchmark_bars = None
+            if symbol == "ETH/USDT":
+                btc = await get_instrument_by_symbol(session, "BTC/USDT")
+                if btc is not None:
+                    benchmark_bars = await load_final_bars(
+                        session, instrument_id=btc.id, timeframe="1h"
+                    )
+            owner = owner_user_id or await resolve_owner_user_id(session)
+            exposures, daily_pnl = await paper_portfolio_state(
+                session, owner_user_id=owner
+            )
+            outcome = evaluate_specialist_closed_candle(
+                bars,
+                higher_bars,
+                symbol=symbol,
+                asset_class=instrument.asset_class,
+                objective=objective,
+                fresh=snapshot.fresh,
+                actionable=snapshot.actionable,
+                benchmark_bars=benchmark_bars,
+                open_exposures=exposures,
+                daily_realized_pnl_pct=daily_pnl,
+            )
         run.status = outcome.status
         run.action = outcome.action
         run.setup_state = outcome.setup_state
         run.details["notes"] = outcome.notes
-        if outcome.publishable:
+        if outcome.publishable or outcome.paper_eligible:
             owner = owner_user_id or await resolve_owner_user_id(session)
             if owner is None:
                 run.status = "failed"
@@ -259,11 +322,26 @@ async def scan_instrument_timeframe(
                     symbol=symbol,
                     timeframe=timeframe,
                     outcome=outcome,
-                    notifications_enabled=switches["notifications_enabled"],
+                    notifications_enabled=(
+                        switches["notifications_enabled"] and not outcome.paper_eligible
+                    ),
+                    force_paper_only=outcome.paper_eligible,
                 )
                 run.candidate_id = candidate.id
                 run.candidate_new = is_new
                 run.details["publish_state"] = candidate.publish_state
+                if is_new and should_auto_open_paper(outcome):
+                    try:
+                        trade = await accept_decision(
+                            session,
+                            owner_user_id=owner,
+                            candidate_id=candidate.id,
+                        )
+                        run.details["paper_trade_id"] = str(trade.id)
+                        run.details["paper_status"] = trade.status
+                    except AppError as exc:
+                        run.details["paper_open_blocked"] = exc.code
+                        run.details["paper_open_error"] = str(exc)[:500]
     except Exception as exc:  # noqa: BLE001 — dead-letter the run, keep scanning others
         run.status = "failed"
         run.error = f"{type(exc).__name__}: {exc}"[:2000]
@@ -279,7 +357,13 @@ async def scan_all(
     timeframes: tuple[str, ...],
     owner_user_id: uuid.UUID | None = None,
     symbols: tuple[str, ...] | None = None,
+    objective: TradingObjective | None = None,
 ) -> list[dict[str, Any]]:
+    if objective is not None:
+        assert_soak_freeze()
+        if symbols is None:
+            symbols = soak_scan_symbols()
+            timeframes = soak_scan_timeframes()
     instruments = await list_enabled_instruments(session)
     summaries: list[dict[str, Any]] = []
     for instrument in instruments:
@@ -287,7 +371,11 @@ async def scan_all(
             continue
         for timeframe in timeframes:
             result = await scan_instrument_timeframe(
-                session, instrument=instrument, timeframe=timeframe, owner_user_id=owner_user_id
+                session,
+                instrument=instrument,
+                timeframe=timeframe,
+                owner_user_id=owner_user_id,
+                objective=objective,
             )
             summaries.append(run_summary(result))
     return summaries

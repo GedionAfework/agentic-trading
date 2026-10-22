@@ -63,3 +63,26 @@ SOL_MTF_CHALLENGER_V2_SCALE_OUT = ChallengerSpec(
     partial_profit_fraction=0.5,
     move_stop_to_breakeven_after_partial=True,
 )
+
+
+# Step 6 research candidate. Not paper-validated until nested walk-forward
+# promotes it. Uses an unused TF stack (1d bias + 4h entry) vs V1/V2 (4h/1h).
+SOL_MTF_CHALLENGER_V3_DAILY4H = ChallengerSpec(
+    code="sol-mtf-daily4h",
+    version_no=3,
+    symbol="SOL/USDT",
+    direction="long",
+    higher_timeframe="1d",
+    entry_timeframe="4h",
+    ema_periods=(12, 21, 50),
+    require_rising_slow_ema=True,
+    volume_ratio_min=2.0,
+    target_r=3.0,
+    max_bars_in_trade=40,
+    max_breakout_extension_atr=2.0,
+    paper_only=True,
+    live_alerts_allowed=False,
+)
+
+STEP6_CATALOG_VERSION = "sol-mtf-daily4h-v3"
+V1_INCUMBENT_MEAN_R = 0.215

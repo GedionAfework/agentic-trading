@@ -66,3 +66,49 @@ def round_trip_costs(
 ) -> Decimal:
     costs = cost_model_from(fill_model)
     return cost_amount(entry * qty, costs=costs) + cost_amount(exit_price * qty, costs=costs)
+
+
+def assumed_fill_bps(fill_model: dict[str, Any]) -> Decimal:
+    costs = cost_model_from(fill_model)
+    return costs.slippage_bps + (costs.spread_bps / Decimal("2"))
+
+
+def adverse_bps(*, planned: Decimal, actual: Decimal, direction: str) -> Decimal | None:
+    if planned <= 0:
+        return None
+    delta = (actual - planned) / planned * Decimal("10000")
+    if direction == "long":
+        return delta
+    return -delta
+
+
+def soak_fill_diagnostics(
+    *,
+    direction: str,
+    planned_entry: Decimal,
+    raw_open: Decimal | None,
+    filled_price: Decimal,
+    fill_model: dict[str, Any],
+) -> dict[str, str]:
+    """Compare paper fill to the freeze's research SOL fill assumption."""
+    assumed = assumed_fill_bps(fill_model)
+    research = Decimal(str(fill_model.get("research_pair_fill_bps") or "8"))
+    vs_plan = adverse_bps(
+        planned=planned_entry, actual=filled_price, direction=direction
+    )
+    vs_open = (
+        None
+        if raw_open is None
+        else adverse_bps(planned=raw_open, actual=filled_price, direction=direction)
+    )
+    extra = None if vs_open is None else vs_open - research
+    return {
+        "planned_entry": str(planned_entry),
+        "raw_next_open": None if raw_open is None else str(raw_open),
+        "filled_price": str(filled_price),
+        "assumed_fill_bps": str(assumed),
+        "realized_fill_bps_vs_open": None if vs_open is None else str(vs_open),
+        "adverse_bps_vs_planned": None if vs_plan is None else str(vs_plan),
+        "research_pair_fill_bps": str(research),
+        "extra_cost_bps_vs_research": None if extra is None else str(extra),
+    }

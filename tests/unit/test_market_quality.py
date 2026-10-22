@@ -53,3 +53,13 @@ def test_freshness_and_actionable_fail_closed() -> None:
     assert actionable_for_signals(fresh=True, open_gaps=1, quality_flags=[]) is False
     assert actionable_for_signals(fresh=True, open_gaps=0, quality_flags=["stale"]) is False
     assert actionable_for_signals(fresh=True, open_gaps=0, quality_flags=[]) is True
+
+
+def test_recent_gap_cutoff_ignores_ancient_outages() -> None:
+    from private_trading_market_data.health import _recent_gap_cutoff
+
+    now = datetime(2026, 10, 12, 19, 0, tzinfo=UTC)
+    cutoff = _recent_gap_cutoff(timeframe="1h", now=now)
+    assert cutoff <= now - timedelta(days=7)
+    ancient = datetime(2021, 4, 25, 5, 0, tzinfo=UTC)
+    assert ancient < cutoff

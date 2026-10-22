@@ -14,6 +14,11 @@
 | [MEASURABLE_DEFINITION_BACKLOG.md](./MEASURABLE_DEFINITION_BACKLOG.md) | English terms → measurable rules |
 | [STRATEGY_SPEC_v1.md](./STRATEGY_SPEC_v1.md) | Executable strategy specification (crypto-first) |
 | [OPEN_DECISIONS.md](./OPEN_DECISIONS.md) | Decisions that must lock before production alerts |
+| [BACKTEST_FINDINGS.md](./BACKTEST_FINDINGS.md) | Measured research results; not live-return claims |
+| [PAPER_SOAK_ROADMAP.md](./PAPER_SOAK_ROADMAP.md) | How to prove SOL V1/V2 on unused data; no retune of spent samples |
+| [SOAK_FREEZE.md](./SOAK_FREEZE.md) | Step 0 freeze journal: V1 profit soak, fill assumptions, runtime scope |
+| [STEP6_HYPOTHESIS.md](./STEP6_HYPOTHESIS.md) | Optional challenger hypothesis before any Step 6 search |
+| [OWNER_2W_COIN_TEST.md](./OWNER_2W_COIN_TEST.md) | 2-week BTC/ETH/SOL/DOGE test + best-agent publish plan |
 | [LABELED_EXAMPLE_PLAN.md](./LABELED_EXAMPLE_PLAN.md) | Plan for golden fixtures / vision / ML labels |
 
 ## How to complete Phase 0

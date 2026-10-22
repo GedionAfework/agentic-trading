@@ -15,6 +15,9 @@ from private_trading_paper_trade.fill_model import (
     PAPER_LABEL,
     default_fill_model,
 )
+from private_trading_paper_trade.holdout import evaluate_holdout_review
+from private_trading_paper_trade.live_alert_gate import evaluate_live_alert_decision
+from private_trading_paper_trade.promotion import evaluate_paper_promotion
 from private_trading_paper_trade.service import (
     accept_decision,
     account_summary,
@@ -24,7 +27,13 @@ from private_trading_paper_trade.service import (
     list_events,
     list_trades,
     monitor_account,
+    soak_step1_progress,
+    soak_step2_progress,
+    soak_step3_progress,
+    soak_step4_progress,
+    soak_step5_progress,
 )
+from private_trading_paper_trade.soak_metrics import evaluate_soak_sample
 
 __version__ = "0.1.0"
 
@@ -48,5 +57,14 @@ __all__ = [
     "list_events",
     "list_trades",
     "monitor_account",
+    "soak_step1_progress",
+    "soak_step2_progress",
+    "soak_step3_progress",
+    "soak_step4_progress",
+    "soak_step5_progress",
+    "evaluate_holdout_review",
+    "evaluate_live_alert_decision",
+    "evaluate_paper_promotion",
+    "evaluate_soak_sample",
     "__version__",
 ]

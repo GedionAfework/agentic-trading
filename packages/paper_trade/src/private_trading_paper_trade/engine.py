@@ -7,10 +7,12 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from private_trading_backtest.costs import cost_amount
 from private_trading_features.types import CandleBar
 
 from private_trading_paper_trade.fill_model import (
     PAPER_LABEL,
+    cost_model_from,
     entry_fill,
     exit_fill,
     max_bars,
@@ -46,6 +48,7 @@ class FillOutcome:
     filled: bool
     entry_price: Decimal | None = None
     entry_bar_open_time: datetime | None = None
+    raw_open: Decimal | None = None
     note: str | None = None
 
 
@@ -60,6 +63,22 @@ class ExitOutcome:
     costs: Decimal = Decimal("0")
     bars_held: int = 0
     note: str | None = None
+
+
+@dataclass(slots=True)
+class ScaleOutState:
+    remaining_qty: Decimal
+    current_stop: Decimal
+    realized_pnl: Decimal = Decimal("0")
+    costs: Decimal = Decimal("0")
+    partial_taken: bool = False
+
+
+@dataclass(slots=True)
+class ManagedExitEvaluation:
+    state: ScaleOutState
+    outcome: ExitOutcome
+    event: str | None = None
 
 
 def validate_plan(plan: PaperPlan) -> list[str]:
@@ -105,6 +124,7 @@ def try_fill_at_next_open(
             filled=True,
             entry_price=price,
             entry_bar_open_time=bar.open_time,
+            raw_open=bar.open,
             note="filled_next_open",
         )
     return FillOutcome(filled=False, note="waiting_for_next_open")
@@ -177,6 +197,128 @@ def evaluate_exit_on_bar(
         costs=costs,
         bars_held=bars_held,
         note=PAPER_LABEL,
+    )
+
+
+def evaluate_scale_out_on_bar(
+    bar: CandleBar,
+    *,
+    direction: str,
+    entry_price: Decimal,
+    original_stop: Decimal,
+    runner_target: Decimal,
+    partial_at_r: Decimal,
+    partial_fraction: Decimal,
+    move_stop_to_breakeven: bool,
+    invalidation: Decimal | None,
+    entry_bar_open_time: datetime,
+    fill_model: dict[str, Any],
+    original_qty: Decimal,
+    state: ScaleOutState,
+    bars_held: int,
+) -> ManagedExitEvaluation:
+    """Paper-only partial exit with state persisted by the caller."""
+    if not bar.is_final or bar.open_time <= entry_bar_open_time:
+        return ManagedExitEvaluation(
+            state=state,
+            outcome=ExitOutcome(closed=False, note="bar_not_applicable"),
+        )
+    if not (Decimal("0") < partial_fraction < Decimal("1")):
+        return ManagedExitEvaluation(
+            state=state,
+            outcome=ExitOutcome(closed=False, note="invalid_partial_fraction"),
+        )
+    risk_per_unit = abs(entry_price - original_stop)
+    if risk_per_unit <= 0 or original_qty <= 0:
+        return ManagedExitEvaluation(
+            state=state,
+            outcome=ExitOutcome(closed=False, note="invalid_risk_geometry"),
+        )
+    sign = Decimal("1") if direction == "long" else Decimal("-1")
+    partial_target = entry_price + sign * risk_per_unit * partial_at_r
+    stop_hit = (
+        bar.low <= state.current_stop
+        if direction == "long"
+        else bar.high >= state.current_stop
+    )
+    partial_hit = (
+        bar.high >= partial_target
+        if direction == "long"
+        else bar.low <= partial_target
+    )
+    runner_hit = (
+        bar.high >= runner_target
+        if direction == "long"
+        else bar.low <= runner_target
+    )
+    invalidated = (
+        invalidation is not None
+        and (
+            (direction == "long" and bar.close < invalidation)
+            or (direction == "short" and bar.close > invalidation)
+        )
+    )
+
+    def realize(raw_price: Decimal, qty: Decimal) -> None:
+        fill = exit_fill(raw_price, direction=direction, fill_model=fill_model)
+        gross = (
+            (fill - entry_price) * qty
+            if direction == "long"
+            else (entry_price - fill) * qty
+        )
+        costs = cost_model_from(fill_model)
+        leg_costs = cost_amount(entry_price * qty, costs=costs) + cost_amount(
+            fill * qty, costs=costs
+        )
+        state.realized_pnl += gross - leg_costs
+        state.costs += leg_costs
+        state.remaining_qty -= qty
+
+    exit_raw: Decimal | None = None
+    exit_reason: str | None = None
+    if stop_hit:
+        exit_raw, exit_reason = state.current_stop, "stop"
+    elif not state.partial_taken and partial_hit:
+        partial_qty = original_qty * partial_fraction
+        realize(partial_target, partial_qty)
+        state.partial_taken = True
+        if move_stop_to_breakeven:
+            state.current_stop = entry_price
+        if runner_hit:
+            exit_raw, exit_reason = runner_target, "runner_target"
+        else:
+            return ManagedExitEvaluation(
+                state=state,
+                outcome=ExitOutcome(closed=False, note="partial_profit_taken"),
+                event="partial_profit",
+            )
+    elif runner_hit:
+        exit_raw, exit_reason = runner_target, "runner_target"
+    elif invalidated:
+        exit_raw, exit_reason = bar.close, "invalidation"
+    elif bars_held >= max_bars(fill_model):
+        exit_raw, exit_reason = bar.close, "timeout"
+
+    if exit_raw is None or exit_reason is None:
+        return ManagedExitEvaluation(state=state, outcome=ExitOutcome(closed=False))
+    final_fill = exit_fill(exit_raw, direction=direction, fill_model=fill_model)
+    realize(exit_raw, state.remaining_qty)
+    risk_amount = risk_per_unit * original_qty
+    realized_r = state.realized_pnl / risk_amount
+    return ManagedExitEvaluation(
+        state=state,
+        outcome=ExitOutcome(
+            closed=True,
+            exit_price=final_fill,
+            exit_reason=exit_reason,
+            exit_bar_open_time=bar.open_time,
+            realized_pnl=state.realized_pnl,
+            realized_r=realized_r,
+            costs=state.costs,
+            bars_held=bars_held,
+            note=PAPER_LABEL,
+        ),
+        event="closed",
     )
 
 

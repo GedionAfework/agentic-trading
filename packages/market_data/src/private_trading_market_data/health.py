@@ -1,14 +1,26 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from private_trading_db.models.market import Candle, Instrument, MarketDataGap
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from private_trading_market_data.contracts import MarketSnapshot, SUPPORTED_TIMEFRAMES
+from private_trading_market_data.contracts import (
+    FRESHNESS_MAX_AGE_SECONDS,
+    SUPPORTED_TIMEFRAMES,
+    MarketSnapshot,
+)
 from private_trading_market_data.quality import actionable_for_signals, is_fresh
 from private_trading_market_data.sessions import is_market_open
+
+# Ancient exchange outages stay logged, but only recent gaps freeze live signals.
+_RECENT_GAP_LOOKBACK = timedelta(days=7)
+
+
+def _recent_gap_cutoff(*, timeframe: str, now: datetime) -> datetime:
+    freshness = FRESHNESS_MAX_AGE_SECONDS.get(timeframe, 3600)
+    return now - max(_RECENT_GAP_LOOKBACK, timedelta(seconds=freshness * 4))
 
 
 async def instrument_snapshot(
@@ -41,6 +53,7 @@ async def instrument_snapshot(
             MarketDataGap.instrument_id == instrument.id,
             MarketDataGap.timeframe == timeframe,
             MarketDataGap.status == "open",
+            MarketDataGap.gap_end >= _recent_gap_cutoff(timeframe=timeframe, now=current),
         )
     )
     gaps_open = int(gaps_result.scalar_one())
@@ -49,7 +62,8 @@ async def instrument_snapshot(
     if last is not None and isinstance(last.quality_flags, list):
         quality_flags.extend(str(f) for f in last.quality_flags)
 
-    fresh = is_fresh(timeframe=timeframe, last_open_time=last.open_time if last else None, now=current)
+    last_open = last.open_time if last else None
+    fresh = is_fresh(timeframe=timeframe, last_open_time=last_open, now=current)
     if not fresh:
         quality_flags.append("stale")
     if not is_market_open(instrument.asset_class, current):

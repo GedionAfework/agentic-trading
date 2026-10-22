@@ -87,6 +87,11 @@ async def get_account(
         closed_trades=summary["closed_trades"],
         sum_realized_r=summary["sum_realized_r"],
         soak=summary["soak"],
+        soak_step1=summary.get("soak_step1") or {},
+        soak_step2=summary.get("soak_step2") or {},
+        soak_step3=summary.get("soak_step3") or {},
+        soak_step4=summary.get("soak_step4") or {},
+        soak_step5=summary.get("soak_step5") or {},
         integrity=summary["integrity"],
     )
 
@@ -121,6 +126,11 @@ async def post_account(
         closed_trades=summary["closed_trades"],
         sum_realized_r=summary["sum_realized_r"],
         soak=summary["soak"],
+        soak_step1=summary.get("soak_step1") or {},
+        soak_step2=summary.get("soak_step2") or {},
+        soak_step3=summary.get("soak_step3") or {},
+        soak_step4=summary.get("soak_step4") or {},
+        soak_step5=summary.get("soak_step5") or {},
         integrity=summary["integrity"],
     )
 

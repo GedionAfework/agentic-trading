@@ -6,6 +6,7 @@ from private_trading_agents.scanner import (
     evaluate_closed_candle,
     prefilter_passes,
     setup_anchor,
+    should_auto_open_paper,
 )
 from private_trading_backtest.fixtures import (
     FIXTURE_BOS_INDEX,
@@ -104,3 +105,18 @@ def test_insufficient_bars_is_skipped_not_failed() -> None:
     )
     assert outcome.status == "skipped_insufficient_bars"
     assert outcome.publishable is False
+
+
+def test_paper_eligible_enter_auto_opens_only_when_not_publishable() -> None:
+    outcome = evaluate_closed_candle(
+        _bars_to(FIXTURE_BOS_INDEX),
+        symbol=FIXTURE_SYMBOL,
+        timeframe=FIXTURE_TIMEFRAME,
+        fresh=True,
+        actionable=True,
+    )
+    assert outcome.action == "ENTER"
+    assert should_auto_open_paper(outcome) is False
+    outcome.publishable = False
+    outcome.paper_eligible = True
+    assert should_auto_open_paper(outcome) is True
