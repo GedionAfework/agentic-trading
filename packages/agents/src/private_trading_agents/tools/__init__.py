@@ -9,6 +9,15 @@ from private_trading_agents.tools.errors import (
 )
 from private_trading_agents.tools.external_gate import external_tools_enabled
 from private_trading_agents.tools.ids import SideEffect, ToolId
+from private_trading_agents.tools.injection import (
+    PolicyTamperError,
+    UntrustedData,
+    assert_tool_policy_intact,
+    injection_corpus,
+    looks_like_injection,
+    policy_fingerprint,
+    wrap_untrusted,
+)
 from private_trading_agents.tools.permissions import (
     AGENT_TOOL_ALLOWLIST,
     allowed_side_effects,
@@ -33,6 +42,7 @@ __all__ = [
     "REQUIRED_BEFORE_FINISH",
     "TOOL_CATALOG",
     "PolicyGraph",
+    "PolicyTamperError",
     "PolicyViolationError",
     "SideEffect",
     "SideEffectDeniedError",
@@ -40,15 +50,21 @@ __all__ = [
     "ToolId",
     "ToolInvocation",
     "ToolPermissionError",
+    "UntrustedData",
     "UnknownToolError",
     "allowed_side_effects",
     "allowed_tools",
+    "assert_tool_policy_intact",
     "assert_tool_registered",
     "catalog_summary",
     "external_tools_enabled",
     "get_tool",
     "has_permission",
+    "injection_corpus",
     "invoke_tool",
+    "looks_like_injection",
     "permissions_matrix",
+    "policy_fingerprint",
     "registered_tool_ids",
+    "wrap_untrusted",
 ]

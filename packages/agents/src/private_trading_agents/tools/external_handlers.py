@@ -18,6 +18,11 @@ from private_trading_agents.tools.external_schemas import (
     VisionExtractIn,
     VisionExtractOut,
 )
+from private_trading_agents.tools.injection import (
+    assert_tool_policy_intact,
+    looks_like_injection,
+    wrap_untrusted,
+)
 from private_trading_agents.vision import parse_vlm_payload, verify_read
 
 
@@ -68,11 +73,27 @@ def handle_knowledge_retrieve(
     *,
     context: ToolContext | None = None,
 ) -> KnowledgeRetrieveOut:
+    # Query is untrusted data — wrap for backends that honor isolation.
+    untrusted = wrap_untrusted(payload.query, source="user")
     backend: KnowledgeBackend = _backend(context, "knowledge_backend", "knowledge.retrieve")
-    result = backend.retrieve(payload.query, top_k=payload.top_k)
+    query_for_backend = (
+        untrusted.as_llm_data_block()
+        if context is not None and context.extras.get("wrap_untrusted_for_backend")
+        else untrusted.text
+    )
+    result = backend.retrieve(query_for_backend, top_k=payload.top_k)
+    assert_tool_policy_intact()
     if isinstance(result, KnowledgeRetrieveOut):
-        return result
-    return KnowledgeRetrieveOut.model_validate(result)
+        out = result
+    else:
+        out = KnowledgeRetrieveOut.model_validate(result)
+    # Chunk excerpts are document data; flag injection-looking text in note only.
+    flagged = sum(1 for c in out.chunks if looks_like_injection(c.excerpt))
+    if flagged and not out.note:
+        out = out.model_copy(
+            update={"note": f"untrusted_chunks_flagged={flagged}"}
+        )
+    return out
 
 
 def handle_knowledge_ask(
@@ -80,13 +101,20 @@ def handle_knowledge_ask(
     *,
     context: ToolContext | None = None,
 ) -> KnowledgeAskOut:
+    untrusted = wrap_untrusted(payload.question, source="user")
     backend: KnowledgeBackend = _backend(context, "knowledge_backend", "knowledge.ask")
+    question_for_backend = (
+        untrusted.as_llm_data_block()
+        if context is not None and context.extras.get("wrap_untrusted_for_backend")
+        else untrusted.text
+    )
     result = backend.ask(
-        payload.question,
+        question_for_backend,
         strategy_tag=payload.strategy_tag,
         asset_class=payload.asset_class,
         timeframe_tag=payload.timeframe_tag,
     )
+    assert_tool_policy_intact()
     if isinstance(result, KnowledgeAskOut):
         return result
     return KnowledgeAskOut.model_validate(result)
@@ -140,9 +168,14 @@ def handle_llm_narrate_facts(
         # Callers wanting deterministic text must use explain.grounded.
         raise ExternalBackendMissing("llm.narrate_facts", "llm_backend")
 
+    assert_tool_policy_intact()
     invented = explanation_invents_numbers(draft, payload.facts)
-    if invented:
-        # Reject invented numbers; return grounded fallback only as rejected marker.
+    # Injection-shaped drafts that also invent numbers are rejected the same way.
+    if invented or (
+        looks_like_injection(draft)
+        and context is not None
+        and context.extras.get("reject_injection_shaped_narration")
+    ):
         safe = grounded_explanation(payload.facts)
         return LlmNarrateFactsOut(
             explanation=safe,

@@ -17,6 +17,7 @@ from private_trading_agents.tools.errors import (
 )
 from private_trading_agents.tools.external_gate import external_tools_enabled
 from private_trading_agents.tools.ids import SideEffect, ToolId
+from private_trading_agents.tools.injection import assert_tool_policy_intact
 from private_trading_agents.tools.permissions import (
     allowed_side_effects,
     has_permission,
@@ -64,6 +65,10 @@ def invoke_tool(
             side_effect=spec.side_effect.value,
         )
 
+    # Seal check before/after EXTERNAL work — injection must not alter allowlists.
+    assert_tool_policy_intact()
+    is_external = spec.side_effect == SideEffect.EXTERNAL
+
     raw = payload.model_dump() if isinstance(payload, BaseModel) else payload
     try:
         validated_in = spec.input_model.model_validate(raw)
@@ -74,6 +79,9 @@ def invoke_tool(
         result = spec.handler(validated_in, context=context)
     else:
         result = spec.handler(validated_in)
+
+    if is_external:
+        assert_tool_policy_intact()
 
     return spec.output_model.model_validate(
         result.model_dump() if isinstance(result, BaseModel) else result

@@ -3,10 +3,14 @@
 Deny by default: an agent may only invoke tools listed here.
 AG-01 gets routing tools only — never specialist compute engines.
 AG-08 is a stub and holds zero tools.
-No WRITE / EXTERNAL / EXECUTE tools are granted to anyone.
+EXTERNAL tools are listed for AG-02/AG-03 but still gated by the enable flag.
+The allowlist is frozen at import — runtime mutation is a policy tamper.
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping
+from types import MappingProxyType
 
 from private_trading_agents.contracts import AgentId
 from private_trading_agents.tools.ids import ToolId
@@ -25,7 +29,6 @@ _AG01_ROUTING = frozenset(
     }
 )
 
-# Frozen allowlists — edit deliberately; never grant by omission of a deny list.
 _AG02_TOOLS = frozenset(
     {
         ToolId.EXPLAIN_GROUNDED,
@@ -41,7 +44,7 @@ _AG03_TOOLS = frozenset(
     }
 )
 
-AGENT_TOOL_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
+_RAW_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
     AgentId.AG01_ORCHESTRATOR: _AG01_ROUTING,
     AgentId.AG02_KNOWLEDGE: _AG02_TOOLS,
     AgentId.AG03_VISION: _AG03_TOOLS,
@@ -52,6 +55,11 @@ AGENT_TOOL_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
     AgentId.AG08_JOURNAL: frozenset(),
     AgentId.AG09_DECISION_ML: frozenset({ToolId.ML_RANK}),
 }
+
+# Frozen — injection / untrusted code paths must not grant tools at runtime.
+AGENT_TOOL_ALLOWLIST: Mapping[AgentId, frozenset[ToolId]] = MappingProxyType(
+    dict(_RAW_ALLOWLIST)
+)
 
 # Base side effects always allowed. EXTERNAL requires an explicit enable flag.
 ALLOWED_SIDE_EFFECTS = frozenset({"none", "read"})
