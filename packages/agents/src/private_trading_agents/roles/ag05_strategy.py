@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from private_trading_agents.agent_runtime import call_tool
 from private_trading_agents.contracts import (
     AgentId,
     AgentStatus,
@@ -9,13 +10,13 @@ from private_trading_agents.contracts import (
     StrategyAgentIn,
     StrategyAgentOut,
 )
-from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools import ToolId
 from private_trading_agents.tools.schemas import StrategyEvaluateOut
 
 
 def run_strategy_agent(payload: StrategyAgentIn | dict) -> StrategyAgentOut:
     inp = StrategyAgentIn.model_validate(payload)
-    result = invoke_tool(
+    result = call_tool(
         agent=AgentId.AG05_STRATEGY,
         tool=ToolId.STRATEGY_EVALUATE,
         payload={
@@ -27,6 +28,7 @@ def run_strategy_agent(payload: StrategyAgentIn | dict) -> StrategyAgentOut:
             "bar_index": inp.bar_index,
             "min_rr": inp.min_rr,
         },
+        note="evaluate strategy",
     )
     assert isinstance(result, StrategyEvaluateOut)
     return StrategyAgentOut(

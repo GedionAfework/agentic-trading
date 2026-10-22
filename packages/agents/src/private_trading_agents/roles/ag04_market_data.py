@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from private_trading_agents.agent_runtime import call_tool
 from private_trading_agents.contracts import (
     AgentId,
     AgentStatus,
@@ -9,19 +10,20 @@ from private_trading_agents.contracts import (
     MarketDataAgentIn,
     MarketDataAgentOut,
 )
-from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools import ToolId
 from private_trading_agents.tools.schemas import FeaturesComputeOut
 
 
 def run_market_data_agent(payload: MarketDataAgentIn | dict) -> MarketDataAgentOut:
     inp = MarketDataAgentIn.model_validate(payload)
-    result = invoke_tool(
+    result = call_tool(
         agent=AgentId.AG04_MARKET_DATA,
         tool=ToolId.FEATURES_COMPUTE,
         payload={
             "bars": [bar.model_dump() for bar in inp.bars],
             "bar_index": inp.bar_index,
         },
+        note="compute features",
     )
     assert isinstance(result, FeaturesComputeOut)
     return MarketDataAgentOut(

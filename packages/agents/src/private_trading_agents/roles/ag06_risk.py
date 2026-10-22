@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+from private_trading_agents.agent_runtime import call_tool
 from private_trading_agents.contracts import (
     AgentId,
     AgentStep,
     RiskAgentIn,
     RiskAgentOut,
 )
-from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools import ToolId
 from private_trading_agents.tools.schemas import RiskAssessOut
 
 
 def run_risk_agent(payload: RiskAgentIn | dict) -> RiskAgentOut:
     inp = RiskAgentIn.model_validate(payload)
-    result = invoke_tool(
+    result = call_tool(
         agent=AgentId.AG06_RISK,
         tool=ToolId.RISK_ASSESS,
         payload={
@@ -28,6 +29,7 @@ def run_risk_agent(payload: RiskAgentIn | dict) -> RiskAgentOut:
             "account_equity": inp.account_equity,
             "prior_blockers": list(inp.prior_blockers),
         },
+        note="assess risk",
     )
     assert isinstance(result, RiskAssessOut)
     return RiskAgentOut(

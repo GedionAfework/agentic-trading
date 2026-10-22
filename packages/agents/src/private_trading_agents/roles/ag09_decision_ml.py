@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from private_trading_agents.agent_runtime import call_tool
 from private_trading_agents.contracts import (
     AgentId,
     AgentStep,
     DecisionMlAgentIn,
     DecisionMlAgentOut,
 )
-from private_trading_agents.tools import ToolContext, ToolId, invoke_tool
+from private_trading_agents.tools import ToolContext, ToolId
 from private_trading_agents.tools.schemas import MlRankOut
 
 
@@ -20,7 +21,7 @@ def run_decision_ml_agent(
     model: Any | None = None,
 ) -> DecisionMlAgentOut:
     inp = DecisionMlAgentIn.model_validate(payload)
-    result = invoke_tool(
+    result = call_tool(
         agent=AgentId.AG09_DECISION_ML,
         tool=ToolId.ML_RANK,
         payload={
@@ -32,6 +33,7 @@ def run_decision_ml_agent(
             "model_present": inp.model_present,
         },
         context=ToolContext(model=model),
+        note="ml rank",
     )
     assert isinstance(result, MlRankOut)
     return DecisionMlAgentOut(

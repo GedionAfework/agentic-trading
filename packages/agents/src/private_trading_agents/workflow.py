@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -24,6 +24,7 @@ from private_trading_strategies.specialists import SpecialistAction, SpecialistS
 from private_trading_strategies.types import Direction, SetupState
 
 from private_trading_agents.adapters import candles_to_models, feature_models_to_payload
+from private_trading_agents.agent_runtime import agent_session
 from private_trading_agents.contracts import (
     AgentId,
     AgentStep,
@@ -51,7 +52,7 @@ from private_trading_agents.roles import (
 )
 from private_trading_agents.vision import VisionVerdict
 
-WORKFLOW_VERSION = "0.1.0"
+WORKFLOW_VERSION = "0.1.1"
 
 
 class DecisionAction(StrEnum):
@@ -90,6 +91,7 @@ class DecisionSnapshot:
     evidence: dict[str, Any]
     workflow: list[dict[str, str]]
     hard_blockers: list[str] = field(default_factory=list)
+    tool_traces: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _confidence(
@@ -129,6 +131,49 @@ def run_decision_workflow(
     vision: VisionVerdict | None = None,
 ) -> DecisionSnapshot:
     """AG-01 orchestrates independent Pydantic-validated AG-02..AG-09 roles."""
+    with agent_session() as session:
+        snapshot = _run_decision_workflow(
+            bars,
+            symbol=symbol,
+            timeframe=timeframe,
+            bar_index=bar_index,
+            direction=direction,
+            data_fresh=data_fresh,
+            market_actionable=market_actionable,
+            position_state=position_state,
+            citations=citations,
+            model=model,
+            model_id=model_id,
+            model_mode=model_mode,
+            min_rr=min_rr,
+            asset_class=asset_class,
+            vision=vision,
+        )
+        traces = session.as_dicts()
+        evidence = dict(snapshot.evidence)
+        evidence["tool_traces"] = traces
+        evidence["agent_runtime"] = "v1"
+        return replace(snapshot, tool_traces=traces, evidence=evidence)
+
+
+def _run_decision_workflow(
+    bars: list[CandleBar],
+    *,
+    symbol: str,
+    timeframe: str,
+    bar_index: int | None = None,
+    direction: str = "long",
+    data_fresh: bool = True,
+    market_actionable: bool = True,
+    position_state: Literal["flat", "open"] = "flat",
+    citations: list[CitationRef] | None = None,
+    model: LoadedModel | None = None,
+    model_id: UUID | None = None,
+    model_mode: str | None = None,
+    min_rr: str = "2.0",
+    asset_class: str = "crypto",
+    vision: VisionVerdict | None = None,
+) -> DecisionSnapshot:
     citation_models = [
         CitationModel.model_validate(
             item.model_dump() if hasattr(item, "model_dump") else item

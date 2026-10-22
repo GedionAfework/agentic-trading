@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from private_trading_agents.agent_runtime import call_tool
 from private_trading_agents.contracts import (
     AgentId,
     AgentStatus,
@@ -9,16 +10,17 @@ from private_trading_agents.contracts import (
     KnowledgeAgentIn,
     KnowledgeAgentOut,
 )
-from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools import ToolId
 from private_trading_agents.tools.schemas import ExplainGroundedOut
 
 
 def run_knowledge_agent(payload: KnowledgeAgentIn | dict) -> KnowledgeAgentOut:
     inp = KnowledgeAgentIn.model_validate(payload)
-    result = invoke_tool(
+    result = call_tool(
         agent=AgentId.AG02_KNOWLEDGE,
         tool=ToolId.EXPLAIN_GROUNDED,
         payload={"facts": inp.facts},
+        note="grounded explain",
     )
     assert isinstance(result, ExplainGroundedOut)
     return KnowledgeAgentOut(

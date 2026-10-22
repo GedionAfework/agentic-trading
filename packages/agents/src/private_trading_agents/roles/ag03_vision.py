@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from private_trading_agents.agent_runtime import call_tool
 from private_trading_agents.contracts import (
     AgentId,
     AgentStep,
     VisionAgentIn,
     VisionAgentOut,
 )
-from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools import ToolId
 from private_trading_agents.tools.schemas import VisionCheckVerdictOut
 
 
@@ -17,7 +18,7 @@ def run_vision_agent(payload: VisionAgentIn | dict | None) -> VisionAgentOut:
         inp = VisionAgentIn(attached=False)
     else:
         inp = VisionAgentIn.model_validate(payload)
-    result = invoke_tool(
+    result = call_tool(
         agent=AgentId.AG03_VISION,
         tool=ToolId.VISION_CHECK_VERDICT,
         payload={
@@ -27,6 +28,7 @@ def run_vision_agent(payload: VisionAgentIn | dict | None) -> VisionAgentOut:
             "needs_clarification": inp.needs_clarification,
             "blocker": inp.blocker,
         },
+        note="vision verdict",
     )
     assert isinstance(result, VisionCheckVerdictOut)
     return VisionAgentOut(

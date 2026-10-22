@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+from private_trading_agents.agent_runtime import call_tool
 from private_trading_agents.contracts import (
     AgentId,
     AgentStep,
     SignalAgentIn,
     SignalAgentOut,
 )
-from private_trading_agents.tools import ToolId, invoke_tool
+from private_trading_agents.tools import ToolId
 from private_trading_agents.tools.schemas import SignalCheckGatesOut
 
 
 def run_signal_agent(payload: SignalAgentIn | dict) -> SignalAgentOut:
     inp = SignalAgentIn.model_validate(payload)
-    result = invoke_tool(
+    result = call_tool(
         agent=AgentId.AG07_SIGNAL,
         tool=ToolId.SIGNAL_CHECK_GATES,
         payload={
@@ -23,6 +24,7 @@ def run_signal_agent(payload: SignalAgentIn | dict) -> SignalAgentOut:
             "market_actionable": inp.market_actionable,
             "hard_blockers": list(inp.hard_blockers),
         },
+        note="check gates",
     )
     assert isinstance(result, SignalCheckGatesOut)
     return SignalAgentOut(

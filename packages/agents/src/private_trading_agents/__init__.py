@@ -1,5 +1,13 @@
 """Decision orchestrator — recommendation contract (Phase 12)."""
 
+from private_trading_agents.agent_runtime import (
+    AgentBudget,
+    AgentSession,
+    BudgetExceededError,
+    ToolTrace,
+    agent_session,
+    call_tool,
+)
 from private_trading_agents.contracts import (
     AgentId,
     CitationModel,
@@ -40,7 +48,10 @@ from private_trading_agents.workflow import (
 __all__ = [
     "AGENT_TOOL_ALLOWLIST",
     "WORKFLOW_VERSION",
+    "AgentBudget",
     "AgentId",
+    "AgentSession",
+    "BudgetExceededError",
     "CitationModel",
     "CitationRef",
     "DecisionAction",
@@ -51,8 +62,11 @@ __all__ = [
     "OrchestratorAgentOut",
     "ToolId",
     "ToolPermissionError",
+    "ToolTrace",
     "UnknownToolError",
+    "agent_session",
     "allowed_tools",
+    "call_tool",
     "catalog_summary",
     "has_permission",
     "invoke_tool",
