@@ -35,6 +35,7 @@ from private_trading_agents.tools.handlers import (
 )
 from private_trading_agents.tools.ids import SideEffect, ToolId
 from private_trading_agents.tools.journal_handlers import (
+    handle_journal_narrate_calibration,
     handle_journal_narrate_performance,
     handle_journal_summarize_metrics,
 )
@@ -199,6 +200,14 @@ TOOL_CATALOG: dict[ToolId, ToolSpec] = {
         input_model=JournalNarrateIn,
         output_model=JournalNarrateOut,
         handler=handle_journal_narrate_performance,
+    ),
+    ToolId.JOURNAL_NARRATE_CALIBRATION: ToolSpec(
+        tool_id=ToolId.JOURNAL_NARRATE_CALIBRATION,
+        description="Narrate a calibration snapshot; never triggers retrain alone.",
+        side_effect=SideEffect.NONE,
+        input_model=JournalNarrateIn,
+        output_model=JournalNarrateOut,
+        handler=handle_journal_narrate_calibration,
     ),
     ToolId.AGENT_RUN_MARKET_DATA: ToolSpec(
         tool_id=ToolId.AGENT_RUN_MARKET_DATA,

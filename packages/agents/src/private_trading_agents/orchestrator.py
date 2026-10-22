@@ -17,23 +17,16 @@ from private_trading_agents.contracts import (
     VisionAgentIn,
 )
 from private_trading_agents.orchestrator_state import OrchestratorState
+from private_trading_agents.planner import (
+    FIXED_AGENTIC_PLAN,
+    RoutingPlanner,
+    legal_routing_tools,
+    resolve_default_planner,
+)
 from private_trading_agents.tools.context import ToolContext
 from private_trading_agents.tools.ids import ToolId
 from private_trading_agents.vision import VisionVerdict
 from private_trading_agents.workflow import DecisionSnapshot
-
-# Policy-compliant planner order (no LLM yet — selects allowlisted routing tools).
-_AGENTIC_PLAN: tuple[ToolId, ...] = (
-    ToolId.AGENT_RUN_MARKET_DATA,
-    ToolId.AGENT_RUN_VISION,
-    ToolId.AGENT_RUN_JOURNAL,
-    ToolId.AGENT_RUN_STRATEGY,
-    ToolId.AGENT_RUN_SIGNAL,
-    ToolId.AGENT_RUN_RISK,
-    ToolId.AGENT_RUN_ML,
-    ToolId.AGENT_RUN_KNOWLEDGE,
-    ToolId.WORKFLOW_FINISH,
-)
 
 OrchestratorMode = Literal["deterministic", "agentic"]
 
@@ -55,8 +48,12 @@ def run_agentic_orchestrator(
     min_rr: str = "2.0",
     asset_class: str = "crypto",
     vision: VisionVerdict | None = None,
+    planner: RoutingPlanner | None = None,
 ) -> DecisionSnapshot:
-    """AG-01 tool loop: only routing tools, policy graph enforced."""
+    """AG-01 tool loop: only routing tools, policy graph enforced.
+
+    Planner may be fixed or LLM-backed; illegal proposals fall back to the fixed plan.
+    """
     citation_models = [
         CitationModel.model_validate(
             item.model_dump() if hasattr(item, "model_dump") else item
@@ -113,9 +110,25 @@ def run_agentic_orchestrator(
         model=model,
         extras={"orchestrator_state": state},
     )
-    # AG-01 may call up to the full plan (+ small headroom).
-    # Budget is applied via call_tool when session is active (set by workflow).
-    for tool in _AGENTIC_PLAN:
+    active_planner = resolve_default_planner(explicit=planner)
+    planner_kinds: list[str] = []
+    max_steps = len(FIXED_AGENTIC_PLAN) + 4
+
+    for _ in range(max_steps):
+        if state.finished and state.snapshot is not None:
+            break
+        legal = legal_routing_tools(state.policy)
+        if not legal:
+            break
+        tool = active_planner.choose_next(state, legal)
+        kind = getattr(active_planner, "last_kind", active_planner.kind)
+        planner_kinds.append(f"{tool.value}:{kind}")
+        # Defense in depth — never invoke outside the legal set.
+        if tool not in legal:
+            from private_trading_agents.planner import fallback_from_fixed
+
+            tool = fallback_from_fixed(legal)
+            planner_kinds[-1] = f"{tool.value}:forced_fallback"
         call_tool(
             agent=AgentId.AG01_ORCHESTRATOR,
             tool=tool,
@@ -123,14 +136,19 @@ def run_agentic_orchestrator(
             context=context,
             note=f"plan:{tool.value}",
         )
-        if state.finished and state.snapshot is not None:
-            return state.snapshot
 
     if state.snapshot is None:
         raise RuntimeError("agentic orchestrator finished without snapshot")
+
+    evidence = dict(state.snapshot.evidence)
+    evidence["planner"] = {
+        "kind": active_planner.kind,
+        "steps": planner_kinds,
+    }
+    state.snapshot.evidence = evidence
     return state.snapshot
 
 
 def ag01_budget() -> AgentBudget:
-    """Enough calls for the full routing plan."""
-    return AgentBudget(max_tool_calls=len(_AGENTIC_PLAN) + 2, max_wall_ms=60_000.0)
+    """Enough calls for the full routing plan (+ LLM retries headroom)."""
+    return AgentBudget(max_tool_calls=len(FIXED_AGENTIC_PLAN) + 4, max_wall_ms=90_000.0)

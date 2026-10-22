@@ -7,12 +7,13 @@ from private_trading_agents.contracts import AgentId
 from private_trading_agents.journal_surface import (
     JournalTradeAuthorityError,
     assert_journal_surface_permissions,
+    run_journal_calibration_surface,
     run_journal_narrate_surface,
 )
 from private_trading_agents.tools import ToolId, has_permission
 from private_trading_agents.tools.injection import assert_tool_policy_intact
 from private_trading_analytics.metrics import SAMPLE_INSUFFICIENT
-from private_trading_analytics.narrate import narrate_performance
+from private_trading_analytics.narrate import narrate_calibration, narrate_performance
 
 
 def _snapshot() -> dict:
@@ -46,6 +47,28 @@ def test_journal_surface_narrates_without_trade_authority() -> None:
     assert result.tool_traces
     assert any(t["tool"] == "journal.narrate_performance" for t in result.tool_traces)
     assert result.meta()["authorizes_trade"] is False
+    assert result.meta()["surface"] == "journal_ai"
+    assert_tool_policy_intact()
+
+
+def test_journal_calibration_surface_no_trade_authority() -> None:
+    snap = {
+        "cohort": "paper",
+        "band_field": "confidence_band",
+        "sample_size": 3,
+        "sample_status": SAMPLE_INSUFFICIENT,
+        "bands": {"low": {"sample_size": 3, "win_rate": 0.5, "mean_r": 0.1}},
+        "drift_flags": [],
+        "warnings": ["sample_size=3 is below 10; metrics are not decision-grade."],
+    }
+    direct = narrate_calibration(snap)
+    result = run_journal_calibration_surface(snapshot=snap)
+    assert result.authorizes_trade is False
+    assert result.decision_action is None
+    assert result.agent == "AG-08"
+    assert result.narrative == direct
+    assert result.tool == "journal.narrate_calibration"
+    assert any(t["tool"] == "journal.narrate_calibration" for t in result.tool_traces)
     assert result.meta()["surface"] == "journal_ai"
     assert_tool_policy_intact()
 

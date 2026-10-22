@@ -81,6 +81,11 @@ def assert_journal_surface_permissions() -> None:
             "AG-08 is not permitted to invoke journal.summarize_metrics",
             details={"agent": "AG-08", "tool": "journal.summarize_metrics"},
         )
+    if not has_permission(AgentId.AG08_JOURNAL, ToolId.JOURNAL_NARRATE_CALIBRATION):
+        raise ForbiddenError(
+            "AG-08 is not permitted to invoke journal.narrate_calibration",
+            details={"agent": "AG-08", "tool": "journal.narrate_calibration"},
+        )
     for tool in _JOURNAL_BANNED_TOOLS:
         if has_permission(AgentId.AG08_JOURNAL, tool):
             raise JournalTradeAuthorityError()
@@ -119,6 +124,45 @@ def run_journal_narrate_surface(*, snapshot: dict[str, Any]) -> JournalNarrateRe
         sample_status=out.sample_status,
         metrics=dict(out.metrics),
         warnings=list(out.warnings),
+        tool=ToolId.JOURNAL_NARRATE_PERFORMANCE.value,
+        tool_traces=traces,
+        policy_fingerprint=sealed,
+    )
+
+
+def run_journal_calibration_surface(*, snapshot: dict[str, Any]) -> JournalNarrateResult:
+    """Narrate calibration via AG-08; never authorizes retrain or trades."""
+    from private_trading_agents.agent_runtime import call_tool
+    from private_trading_agents.tools.journal_schemas import JournalNarrateOut
+
+    assert_journal_surface_permissions()
+    assert_tool_policy_intact()
+    sealed = policy_fingerprint()
+    cohort = str(snapshot.get("cohort") or "paper")
+
+    with agent_session() as session:
+        narrated = call_tool(
+            agent=AgentId.AG08_JOURNAL,
+            tool=ToolId.JOURNAL_NARRATE_CALIBRATION,
+            payload={"snapshot": snapshot},
+            note="journal_calibration_surface",
+        )
+        assert isinstance(narrated, JournalNarrateOut)
+        traces = session.as_dicts()
+
+    assert_tool_policy_intact()
+    if policy_fingerprint() != sealed:
+        raise JournalTradeAuthorityError()
+    assert_journal_surface_permissions()
+
+    return JournalNarrateResult(
+        narrative=narrated.narrative,
+        cohort=cohort,
+        sample_size=int(snapshot.get("sample_size") or 0),
+        sample_status=str(snapshot.get("sample_status") or "unknown"),
+        metrics={},
+        warnings=list(snapshot.get("warnings") or []),
+        tool=ToolId.JOURNAL_NARRATE_CALIBRATION.value,
         tool_traces=traces,
         policy_fingerprint=sealed,
     )

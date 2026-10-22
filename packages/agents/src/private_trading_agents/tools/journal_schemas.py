@@ -60,3 +60,4 @@ class JournalNarrateOut(BaseModel):
     narrative: str
     explanation_source: Literal["deterministic"] = "deterministic"
     authorizes_trade: Literal[False] = False
+    kind: Literal["performance", "calibration"] = "performance"

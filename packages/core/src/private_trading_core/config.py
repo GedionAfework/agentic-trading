@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # Run agentic orchestrator in shadow beside deterministic paper/scanner decisions.
     # Never overrides primary action / paper opens. Off by default.
     agentic_shadow_enabled: bool = False
+    # Allow AG-01 to use an injected LLM routing planner (still policy-gated).
+    # Without an injected bridge, agentic mode keeps the fixed plan.
+    agentic_llm_planner_enabled: bool = False
 
     # Public market data (no secrets required for Binance spot klines)
     binance_base_url: str = "https://api.binance.com"

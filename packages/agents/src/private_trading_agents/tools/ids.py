@@ -26,6 +26,7 @@ class ToolId(StrEnum):
     # AG-08 journal — read-only analytics over supplied rows/snapshots (never writes)
     JOURNAL_SUMMARIZE_METRICS = "journal.summarize_metrics"
     JOURNAL_NARRATE_PERFORMANCE = "journal.narrate_performance"
+    JOURNAL_NARRATE_CALIBRATION = "journal.narrate_calibration"
 
     # AG-01 routing tools only — call specialists, never raw engines
     AGENT_RUN_MARKET_DATA = "agent.run_market_data"

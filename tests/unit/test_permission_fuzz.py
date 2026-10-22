@@ -57,20 +57,26 @@ def _minimal_payload(tool: ToolId) -> dict:
         return {"attached": False}
     if tool == ToolId.JOURNAL_SUMMARIZE_METRICS:
         return {"cohort": "paper", "trades": []}
-    if tool == ToolId.JOURNAL_NARRATE_PERFORMANCE:
-        return {
-            "snapshot": {
-                "cohort": "paper",
-                "strategy_code": "*",
-                "instrument_symbol": "*",
-                "timeframe": "*",
-                "session_bucket": "*",
-                "sample_size": 0,
-                "sample_status": "insufficient_sample",
-                "metrics": {},
-                "warnings": [],
-            }
+    if tool in {
+        ToolId.JOURNAL_NARRATE_PERFORMANCE,
+        ToolId.JOURNAL_NARRATE_CALIBRATION,
+    }:
+        base = {
+            "cohort": "paper",
+            "strategy_code": "*",
+            "instrument_symbol": "*",
+            "timeframe": "*",
+            "session_bucket": "*",
+            "sample_size": 0,
+            "sample_status": "insufficient_sample",
+            "metrics": {},
+            "warnings": [],
         }
+        if tool == ToolId.JOURNAL_NARRATE_CALIBRATION:
+            base["band_field"] = "confidence_band"
+            base["bands"] = {}
+            base["drift_flags"] = []
+        return {"snapshot": base}
     if tool == ToolId.EXPLAIN_GROUNDED:
         return {
             "facts": {

@@ -71,6 +71,8 @@ async def test_ask_agent_no_trade_authority_and_traces(monkeypatch: pytest.Monke
     assert result.tool_traces[0]["tool"] == "knowledge.ask"
     assert result.tool_traces[0]["status"] == "ok"
     assert result.meta()["authorizes_trade"] is False
+    assert result.external_tool_gated is True
+    assert result.meta()["external_tool_gated"] is True
     assert_tool_policy_intact()
 
 

@@ -320,6 +320,8 @@ async def narrate_snapshot(
 async def narrate_calibration_snapshot(
     session: AsyncSession, *, snapshot_id: uuid.UUID, owner_user_id: uuid.UUID
 ) -> dict[str, Any]:
+    from private_trading_agents.journal_surface import run_journal_calibration_surface
+
     result = await session.execute(
         select(CalibrationSnapshot).where(
             CalibrationSnapshot.id == snapshot_id,
@@ -329,8 +331,13 @@ async def narrate_calibration_snapshot(
     snap = result.scalar_one_or_none()
     if snap is None:
         raise AppError("NOT_FOUND", "Calibration snapshot not found", retryable=False)
-    text = narrate_calibration(calibration_to_dict(snap))
-    return {"snapshot_id": str(snap.id), "cohort": snap.cohort, "narrative": text}
+    narrated = run_journal_calibration_surface(snapshot=calibration_to_dict(snap))
+    return {
+        "snapshot_id": str(snap.id),
+        "cohort": snap.cohort,
+        "narrative": narrated.narrative,
+        "meta": narrated.meta(),
+    }
 
 
 async def sync_feedback_from_telegram(

@@ -56,6 +56,7 @@ _RAW_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
         {
             ToolId.JOURNAL_SUMMARIZE_METRICS,
             ToolId.JOURNAL_NARRATE_PERFORMANCE,
+            ToolId.JOURNAL_NARRATE_CALIBRATION,
         }
     ),
     AgentId.AG09_DECISION_ML: frozenset({ToolId.ML_RANK}),

@@ -152,6 +152,16 @@ BTC/ETH/BNB/FX stay research-only until a challenger passes this step on that sy
 A later Step 6 version needs a different unused idea (or more calendar data),
 not a looser trade-count gate on this catalog.
 
+## Agentic shadow (optional, off by default)
+
+During paper soak you may set `AGENTIC_SHADOW_ENABLED=true` so AG-01 runs
+beside the deterministic path and records parity traces in decision evidence.
+Shadow **never** overrides ENTER / paper opens. Ask AI request-scopes EXTERNAL
+for `knowledge.ask`; keep `AGENT_EXTERNAL_TOOLS_ENABLED` and
+`AGENTIC_LLM_PLANNER_ENABLED` off unless you are intentionally testing those
+bridges. Snapshot flags anytime with `agentic_ops_status()` from
+`private_trading_agents`.
+
 ## What this roadmap is not
 
 - A plan to make all pairs trade.

@@ -18,8 +18,10 @@ from private_trading_core.errors import ForbiddenError
 from private_trading_knowledge.ask import AskResult, ask_knowledge
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from private_trading_agents.agent_runtime import ToolTrace, agent_session
+from private_trading_agents.agent_runtime import agent_session, call_tool
 from private_trading_agents.contracts import AgentId
+from private_trading_agents.external_backends import PrefetchedKnowledgeBackend
+from private_trading_agents.tools.context import ToolContext
 from private_trading_agents.tools.ids import ToolId
 from private_trading_agents.tools.injection import (
     PolicyTamperError,
@@ -28,6 +30,7 @@ from private_trading_agents.tools.injection import (
     policy_fingerprint,
     wrap_untrusted,
 )
+from private_trading_agents.tools.external_schemas import KnowledgeAskOut
 from private_trading_agents.tools.permissions import has_permission
 
 # Tools Ask AI must never be able to invoke (defense in depth beyond allowlist).
@@ -75,6 +78,7 @@ class AskAgentResult:
     injection_shaped_question: bool = False
     tool_traces: list[dict[str, Any]] = field(default_factory=list)
     policy_fingerprint: str = ""
+    external_tool_gated: bool = False
 
     def meta(self) -> dict[str, Any]:
         return {
@@ -86,6 +90,7 @@ class AskAgentResult:
             "injection_shaped_question": self.injection_shaped_question,
             "tool_traces": list(self.tool_traces),
             "policy_fingerprint": self.policy_fingerprint,
+            "external_tool_gated": self.external_tool_gated,
             "surface": "ask_ai",
         }
 
@@ -124,7 +129,6 @@ async def run_ask_agent(
     with agent_session() as agent_sess:
         started = perf_counter()
         try:
-            # Corpus ask treats question/evidence as untrusted data (see ask_knowledge).
             result: AskResult = await ask_knowledge(
                 session,
                 question=untrusted.text,
@@ -135,31 +139,25 @@ async def run_ask_agent(
                 asset_class=asset_class,
                 timeframe_tag=timeframe_tag,
             )
-            duration_ms = round((perf_counter() - started) * 1000.0, 3)
-            agent_sess.record(
-                ToolTrace(
-                    agent=AgentId.AG02_KNOWLEDGE.value,
-                    tool=ToolId.KNOWLEDGE_ASK.value,
-                    status="ok",
-                    duration_ms=duration_ms,
-                    step=1,
-                    code=None,
-                    note="ask_ai_surface",
-                )
+            # Pass through gated EXTERNAL tool with request-scoped enable + live backend.
+            gated = call_tool(
+                agent=AgentId.AG02_KNOWLEDGE,
+                tool=ToolId.KNOWLEDGE_ASK,
+                payload={"question": untrusted.text},
+                context=ToolContext(
+                    extras={
+                        "external_tools_enabled": True,
+                        "knowledge_backend": PrefetchedKnowledgeBackend(result),
+                        "wrap_untrusted_for_backend": True,
+                    }
+                ),
+                note="ask_ai_external_gate",
             )
-        except Exception as exc:
+            assert isinstance(gated, KnowledgeAskOut)
             duration_ms = round((perf_counter() - started) * 1000.0, 3)
-            agent_sess.record(
-                ToolTrace(
-                    agent=AgentId.AG02_KNOWLEDGE.value,
-                    tool=ToolId.KNOWLEDGE_ASK.value,
-                    status="error",
-                    duration_ms=duration_ms,
-                    step=1,
-                    code=type(exc).__name__,
-                    note=str(exc)[:200],
-                )
-            )
+            del duration_ms  # traced via call_tool session
+            external_tool_gated = True
+        except Exception:
             raise
 
         traces = agent_sess.as_dicts()
@@ -167,7 +165,6 @@ async def run_ask_agent(
     assert_tool_policy_intact()
     if policy_fingerprint() != sealed:
         raise PolicyTamperError("Ask AI observed tool-policy fingerprint drift")
-    # Re-check after EXTERNAL-ish work — injection must not grant trade tools.
     assert_ask_surface_permissions()
 
     return AskAgentResult(
@@ -182,4 +179,5 @@ async def run_ask_agent(
         injection_shaped_question=injection_shaped,
         tool_traces=traces,
         policy_fingerprint=sealed,
+        external_tool_gated=external_tool_gated,
     )

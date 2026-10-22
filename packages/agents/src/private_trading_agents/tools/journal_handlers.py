@@ -60,4 +60,24 @@ def handle_journal_narrate_performance(
         narrative=narrative,
         explanation_source="deterministic",
         authorizes_trade=False,
+        kind="performance",
+    )
+
+
+def handle_journal_narrate_calibration(
+    payload: JournalNarrateIn,
+) -> JournalNarrateOut:
+    from private_trading_analytics.narrate import narrate_calibration
+
+    snapshot: dict[str, Any] = dict(payload.snapshot)
+    if "cohort" not in snapshot:
+        raise ValueError("snapshot.cohort is required")
+    if "band_field" not in snapshot:
+        raise ValueError("snapshot.band_field is required")
+    narrative = narrate_calibration(snapshot)
+    return JournalNarrateOut(
+        narrative=narrative,
+        explanation_source="deterministic",
+        authorizes_trade=False,
+        kind="calibration",
     )

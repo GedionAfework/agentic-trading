@@ -217,6 +217,7 @@ async def post_calibration_narrate(
         snapshot_id=uuid.UUID(result["snapshot_id"]),
         cohort=result["cohort"],
         narrative=result["narrative"],
+        meta=dict(result.get("meta") or {}),
     )
 
 
