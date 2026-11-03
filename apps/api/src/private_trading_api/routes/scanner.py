@@ -140,7 +140,7 @@ async def put_switches(
 ) -> SwitchesOut:
     user.require_roles("owner", "admin")
     current = await get_kill_switches(session)
-    for key in ("scanner_enabled", "notifications_enabled"):
+    for key in ("scanner_enabled", "notifications_enabled", "paper_auto_open_enabled"):
         value = getattr(body, key)
         if value is not None:
             current = await set_kill_switch(session, key=key, enabled=value, actor_user_id=user.id)

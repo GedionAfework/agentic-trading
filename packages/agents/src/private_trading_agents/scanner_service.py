@@ -38,7 +38,8 @@ from private_trading_agents.scanner import (
 )
 from private_trading_agents.service import persist_decision
 
-SWITCH_KEYS = ("scanner_enabled", "notifications_enabled")
+# paper_auto_open_enabled: the supervisor may set it false; only the owner sets it true.
+SWITCH_KEYS = ("scanner_enabled", "notifications_enabled", "paper_auto_open_enabled")
 QUEUES = ("market", "ai", "notifications", "backtests")
 
 
@@ -47,6 +48,7 @@ async def get_kill_switches(session: AsyncSession) -> dict[str, bool]:
     values = {
         "scanner_enabled": settings.scanner_enabled,
         "notifications_enabled": settings.notifications_enabled,
+        "paper_auto_open_enabled": True,
     }
     result = await session.execute(select(SystemSetting).where(SystemSetting.key.in_(SWITCH_KEYS)))
     for row in result.scalars().all():
@@ -331,17 +333,22 @@ async def scan_instrument_timeframe(
                 run.candidate_new = is_new
                 run.details["publish_state"] = candidate.publish_state
                 if is_new and should_auto_open_paper(outcome):
-                    try:
-                        trade = await accept_decision(
-                            session,
-                            owner_user_id=owner,
-                            candidate_id=candidate.id,
-                        )
-                        run.details["paper_trade_id"] = str(trade.id)
-                        run.details["paper_status"] = trade.status
-                    except AppError as exc:
-                        run.details["paper_open_blocked"] = exc.code
-                        run.details["paper_open_error"] = str(exc)[:500]
+                    if not switches.get("paper_auto_open_enabled", True):
+                        # Supervisor/owner pause: record the ENTER, open nothing.
+                        run.details["paper_open_blocked"] = "PAPER_AUTO_OPEN_PAUSED"
+                        run.details["paper_open_error"] = "paper auto-open is paused"
+                    else:
+                        try:
+                            trade = await accept_decision(
+                                session,
+                                owner_user_id=owner,
+                                candidate_id=candidate.id,
+                            )
+                            run.details["paper_trade_id"] = str(trade.id)
+                            run.details["paper_status"] = trade.status
+                        except AppError as exc:
+                            run.details["paper_open_blocked"] = exc.code
+                            run.details["paper_open_error"] = str(exc)[:500]
     except Exception as exc:  # noqa: BLE001 — dead-letter the run, keep scanning others
         run.status = "failed"
         run.error = f"{type(exc).__name__}: {exc}"[:2000]

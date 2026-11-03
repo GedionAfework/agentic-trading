@@ -18,6 +18,7 @@ from private_trading_paper_trade.service import (
     monitor_account,
     portfolio_status,
 )
+from private_trading_paper_trade.supervisor import run_supervisor, supervisor_status
 from private_trading_paper_trade.trading_profile import (
     set_trading_objective,
     trading_profile_status,
@@ -115,6 +116,38 @@ async def get_portfolio(
     """Read-only portfolio gate view: caps, headroom, per-coin verdicts."""
     user.require_roles("owner", "admin", "viewer")
     return PortfolioStatusOut(**await portfolio_status(session, owner_user_id=user.id))
+
+
+@router.get("/supervisor")
+async def get_supervisor(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Supervisor state: pause flag, reasons, last findings per model."""
+    user.require_roles("owner", "admin", "viewer")
+    return await supervisor_status(session)
+
+
+@router.post("/supervisor/run")
+async def post_supervisor_run(
+    request: Request,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Run the checks now. Can pause auto-open; can never resume it."""
+    user.require_roles("owner", "admin")
+    await run_supervisor(session, owner_user_id=user.id)
+    await record_audit(
+        session,
+        action="paper.supervisor_run",
+        actor_type="user",
+        actor_id=user.id,
+        resource_type="paper_supervisor",
+        correlation_id=get_correlation_id(request),
+        metadata={},
+    )
+    await session.commit()
+    return await supervisor_status(session)
 
 
 @router.get("/trading-profile", response_model=TradingProfileOut)

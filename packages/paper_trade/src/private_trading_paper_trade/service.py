@@ -911,6 +911,8 @@ async def _closed_soak_trades(
             PaperTrade.instrument_symbol == SOAK_SYMBOL,
             PaperTrade.status == STATUS_CLOSED,
         )
+        # Drawdown is path-dependent: score trades in the order they closed.
+        .order_by(PaperTrade.closed_at.asc().nulls_last(), PaperTrade.created_at.asc())
     )
     closed: list[ClosedSoakTrade] = []
     for trade in rows.scalars().all():

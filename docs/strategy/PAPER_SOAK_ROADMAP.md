@@ -166,6 +166,28 @@ headroom, per-coin verdicts (BTC/ETH/SOL/DOGE) and recent refused opens.
 Verdicts call the same gate function, so the view cannot disagree with it.
 `authorizes_trade` is always false: free headroom never means a trade.
 
+## Paper supervisor (kill rules, automated)
+
+Celery beat `paper.supervise` runs every 15 minutes. Checks are deterministic
+and judged **per model** (SOL V1, SOL V2, DOGE V1 never pooled):
+
+| Finding | Rule | Action |
+|---|---|---|
+| `drawdown_breach` | closed-trade DD > 20R | pause + alert |
+| `drawdown_warning` | DD ≥ 15R | alert |
+| `negative_expectancy` | ≥ 20 trades and mean R ≤ 0 (Step 1 kill rule) | pause + alert |
+| `fill_gap_breach` / `_warning` | avg extra cost ≥ 2 bps at ≥ 20 / ≥ 5 trades | pause / alert |
+| `integrity_defects` | paper state defects | pause + alert |
+| `stale_feed` | no fresh closed 1h candle (BTC/ETH/SOL/DOGE) | alert |
+| `scanner_failures` | ≥ 3 failed scan runs in 6h | alert |
+
+Pause sets `paper_auto_open_enabled=false`: new ENTERs are recorded but no
+paper trade opens; open trades are still monitored to exit. The supervisor
+**cannot resume**. Owner resumes after inspection with `/settings paper on` or
+`PUT /v1/scanner/switches {"paper_auto_open_enabled": true}` (audited).
+Alerts go to Telegram only when a new finding appears, plus one all-clear.
+State: `GET /v1/paper/supervisor`; manual run: `POST /v1/paper/supervisor/run`.
+
 ## Agentic shadow (optional, off by default)
 
 During paper soak you may set `AGENTIC_SHADOW_ENABLED=true` so AG-01 runs

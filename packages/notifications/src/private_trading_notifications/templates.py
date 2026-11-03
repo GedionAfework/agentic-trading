@@ -230,7 +230,8 @@ def settings_view(switches: dict[str, bool], *, can_edit: bool) -> str:
     if can_edit:
         lines.append("")
         lines.append("Change: <code>/settings scanner on|off</code>, "
-                     "<code>/settings notifications on|off</code>")
+                     "<code>/settings notifications on|off</code>, "
+                     "<code>/settings paper on|off</code>")
     return "\n".join(lines)
 
 

@@ -25,6 +25,8 @@ from private_trading_notifications.telegram_client import (
 from private_trading_notifications.templates import alert_keyboard, alert_message
 
 ALERT_TOPIC = "signal.candidate"
+# Must match private_trading_paper_trade.supervisor.SUPERVISOR_ALERT_TOPIC.
+SUPERVISOR_ALERT_TOPIC = "ops.supervisor_alert"
 MAX_ATTEMPTS = 5
 RETRY_BACKOFF_SECONDS = (5, 30, 120, 600)
 
@@ -153,13 +155,67 @@ async def enqueue_from_outbox(session: AsyncSession, *, limit: int = 100) -> dic
             )
             created += 1
         event.published_at = now
+    supervisor = await _enqueue_supervisor_alerts(session, now=now, limit=limit)
     await session.flush()
     return {
         "events": len(events),
         "deliveries_created": created,
         "skipped_existing": skipped_existing,
         "events_without_chat": no_chat,
+        "supervisor_events": supervisor["events"],
+        "supervisor_deliveries_created": supervisor["deliveries_created"],
     }
+
+
+async def _enqueue_supervisor_alerts(
+    session: AsyncSession, *, now: datetime, limit: int
+) -> dict[str, int]:
+    """Supervisor alerts → per-chat deliveries (no candidate, no buttons).
+
+    Idempotent per outbox event: an event is marked published once enqueued.
+    """
+    result = await session.execute(
+        select(OutboxEvent)
+        .where(
+            OutboxEvent.topic == SUPERVISOR_ALERT_TOPIC,
+            OutboxEvent.published_at.is_(None),
+        )
+        .order_by(OutboxEvent.created_at)
+        .limit(limit)
+    )
+    events = list(result.scalars().all())
+    created = 0
+    for event in events:
+        event.attempt_count += 1
+        payload = dict(event.payload or {})
+        text = str(payload.get("text") or "")[:3500]
+        try:
+            owner = uuid.UUID(str(payload.get("owner_user_id")))
+        except ValueError:
+            event.last_error = "bad_owner_user_id"
+            event.published_at = now
+            continue
+        chats = await list_linked_chats(session, user_id=owner)
+        if not chats:
+            event.last_error = "no_linked_chat"
+        for account in chats:
+            session.add(
+                NotificationDelivery(
+                    outbox_event_id=event.id,
+                    candidate_id=None,
+                    decision_record_id=None,
+                    owner_user_id=owner,
+                    telegram_chat_id=account.telegram_chat_id,
+                    template="supervisor_alert",
+                    message_text=text,
+                    reply_markup=None,
+                    status="pending",
+                    next_attempt_at=now,
+                )
+            )
+            created += 1
+        event.published_at = now
+    return {"events": len(events), "deliveries_created": created}
 
 
 async def _attempt(client: TelegramTransport, delivery: NotificationDelivery) -> SendResult:

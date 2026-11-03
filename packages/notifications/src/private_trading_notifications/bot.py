@@ -244,7 +244,11 @@ async def _handle_settings(
     args: list[str], account: LinkedAccount, result: HandledUpdate, repo: BotRepository
 ) -> None:
     chat_id = account.chat_id
-    switch_map = {"scanner": "scanner_enabled", "notifications": "notifications_enabled"}
+    switch_map = {
+        "scanner": "scanner_enabled",
+        "notifications": "notifications_enabled",
+        "paper": "paper_auto_open_enabled",
+    }
     if len(args) >= 2 and args[0].lower() in switch_map and args[1].lower() in ("on", "off"):
         if not account.can_edit_settings:
             result.handled = "settings_forbidden"

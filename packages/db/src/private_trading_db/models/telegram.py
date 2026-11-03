@@ -76,10 +76,11 @@ class NotificationDelivery(Base):
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     outbox_event_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    candidate_id: Mapped[uuid.UUID] = mapped_column(
+    # NULL for ops/supervisor alerts that are not tied to a signal candidate.
+    candidate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("signal_candidates.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     decision_record_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
@@ -113,10 +114,11 @@ class TelegramAlertAction(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    candidate_id: Mapped[uuid.UUID] = mapped_column(
+    # NULL for ops/supervisor alerts that are not tied to a signal candidate.
+    candidate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("signal_candidates.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
