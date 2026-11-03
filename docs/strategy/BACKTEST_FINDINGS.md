@@ -292,3 +292,26 @@ scan/decision (`btc_regime_shadow`), and `GET /v1/paper/btc-regime-shadow`
 splits *forward* closed paper trades by it. Revisit only when each bucket
 has ≥30 closed paper trades per model, and then only as a new written
 hypothesis with its own walk-forward.
+
+## 2026-11-04 — NaolDesk Step 6 (pre-registered): REJECT both setups
+
+Hypothesis: [STEP6_HYPOTHESIS_NAOLDESK.md](./STEP6_HYPOTHESIS_NAOLDESK.md),
+committed (6746691) before the run. Script: `scripts/_naoldesk_test.py`,
+run once on Binance 2022-01-01..2026-11-03, BTC/ETH/SOL/DOGE/BNB, long only,
+6 bps adverse fills + 10 bps fee per side.
+
+| Setup | Trades | Win rate | Mean R | Total | PF | Max DD | Positive years |
+|---|---|---|---|---|---|---|---|
+| A Breakout, all coins | 814 | 44.0% | −0.083R | −67.5R | 0.85 | 113.3R | 1/5 |
+| B Spring, all coins | 334 | 38.9% | −0.238R | −79.6R | 0.56 | 89.3R | 0/5 |
+
+Per coin (A): BTC −0.169R, ETH −0.080R, SOL −0.104R, **DOGE +0.098R** (130 ·
+46.9% · PF 1.20), BNB −0.113R. Per coin (B): every coin negative.
+
+Diagnostics: only 42.5% (A) / 36.8% (B) of trades ever reached +1R, which
+caps the achievable win rate near that level. Exits (A): stop 329,
+structure 327, break-even 155, climax 3.
+
+**Decision: REJECT** (every owner target and roadmap gate failed, pooled and
+per coin). Not added to any registry. One revision is allowed only with a
+written, framework-based reason, as a new pre-registered version.
