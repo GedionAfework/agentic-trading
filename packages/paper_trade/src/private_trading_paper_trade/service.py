@@ -23,8 +23,6 @@ from private_trading_risk.portfolio import (
 from private_trading_risk.sizing import paper_quantity
 from private_trading_strategies.soak_freeze import (
     SOAK_FILL_MODEL,
-    SOAK_RESEARCH_MEAN_R,
-    SOAK_RESEARCH_WIN_RATE,
     SOAK_STEP1_MIN_CLOSED_TRADES,
     SOAK_STEP2_MAX_DRAWDOWN_R,
     SOAK_STEP2_MAX_EXTRA_COST_BPS,
@@ -812,6 +810,8 @@ async def account_summary(
     )
     closed_count, sum_r = closed.one()
     integrity = await integrity_report(session, account_id=account.id)
+    from private_trading_paper_trade.trading_profile import trading_profile_status
+
     return {
         "account_id": str(account.id),
         "label": account.label,
@@ -828,13 +828,26 @@ async def account_summary(
         "soak_step3": await soak_step3_progress(session, owner_user_id=owner_user_id),
         "soak_step4": await soak_step4_progress(session, owner_user_id=owner_user_id),
         "soak_step5": await soak_step5_progress(session, owner_user_id=owner_user_id),
+        "trading_profile": await trading_profile_status(session),
         "integrity": integrity,
     }
 
 
+def soak_trade_model_code(fill_model: dict[str, Any] | None) -> str | None:
+    """Model that opened a SOL soak trade.
+
+    ``paper_model_code`` is authoritative. Rows opened before profiles existed
+    only carry ``soak_freeze_model`` (always the frozen V1 incumbent).
+    """
+    data = dict(fill_model or {})
+    code = data.get("paper_model_code") or data.get("soak_freeze_model")
+    return code if isinstance(code, str) else None
+
+
 async def _closed_soak_trades(
-    session: AsyncSession, *, owner_user_id: uuid.UUID
+    session: AsyncSession, *, owner_user_id: uuid.UUID, model_code: str
 ) -> list[ClosedSoakTrade]:
+    """Closed SOL trades for one profile only. V1 and V2 are never pooled."""
     rows = await session.execute(
         select(PaperTrade).where(
             PaperTrade.owner_user_id == owner_user_id,
@@ -845,6 +858,8 @@ async def _closed_soak_trades(
     closed: list[ClosedSoakTrade] = []
     for trade in rows.scalars().all():
         if trade.realized_r is None:
+            continue
+        if soak_trade_model_code(trade.fill_model) != model_code:
             continue
         extra = dict(trade.fill_model or {}).get("soak_fill", {}).get(
             "extra_cost_bps_vs_research"
@@ -861,11 +876,22 @@ async def _closed_soak_trades(
     return closed
 
 
+async def _active_research_benchmarks(session: AsyncSession):
+    """Research WR/mean R for the client-selected profile (V1 or V2)."""
+    from private_trading_paper_trade.trading_profile import get_active_paper_model
+
+    model = await get_active_paper_model(session)
+    return float(model.validation.mean_r), float(model.validation.win_rate), model
+
+
 async def soak_step1_progress(
     session: AsyncSession, *, owner_user_id: uuid.UUID
 ) -> dict[str, Any]:
+    research_mean_r, research_win_rate, model = await _active_research_benchmarks(session)
     sample = evaluate_soak_sample(
-        await _closed_soak_trades(session, owner_user_id=owner_user_id),
+        await _closed_soak_trades(
+            session, owner_user_id=owner_user_id, model_code=model.code
+        ),
         min_closed_trades=SOAK_STEP1_MIN_CLOSED_TRADES,
         min_mean_r=0.0,
         min_profit_factor=1.0,
@@ -873,21 +899,23 @@ async def soak_step1_progress(
         min_positive_month_fraction=0.0,
         min_trades_per_month=1,
         max_extra_cost_bps=SOAK_STEP2_MAX_EXTRA_COST_BPS,
-        research_mean_r=SOAK_RESEARCH_MEAN_R,
-        research_win_rate=SOAK_RESEARCH_WIN_RATE,
+        research_mean_r=research_mean_r,
+        research_win_rate=research_win_rate,
     )
     trades = int(sample["closed_trades"])
     mean_r = float(sample["mean_r"])
     return {
         "symbol": SOAK_SYMBOL,
+        "model_code": model.code,
+        "objective": model.objective.value,
         "closed_trades": trades,
         "min_closed_trades": SOAK_STEP1_MIN_CLOSED_TRADES,
         "win_rate": sample["win_rate"],
         "mean_r": mean_r,
         "max_drawdown_r": sample["max_drawdown_r"],
         "avg_extra_cost_bps_vs_research": sample["avg_extra_cost_bps_vs_research"],
-        "research_mean_r": SOAK_RESEARCH_MEAN_R,
-        "research_win_rate": SOAK_RESEARCH_WIN_RATE,
+        "research_mean_r": research_mean_r,
+        "research_win_rate": research_win_rate,
         "step1_complete": trades >= SOAK_STEP1_MIN_CLOSED_TRADES,
         "continue_soak": trades >= SOAK_STEP1_MIN_CLOSED_TRADES and mean_r > 0,
     }
@@ -896,8 +924,11 @@ async def soak_step1_progress(
 async def soak_step2_progress(
     session: AsyncSession, *, owner_user_id: uuid.UUID
 ) -> dict[str, Any]:
+    research_mean_r, research_win_rate, model = await _active_research_benchmarks(session)
     sample = evaluate_soak_sample(
-        await _closed_soak_trades(session, owner_user_id=owner_user_id),
+        await _closed_soak_trades(
+            session, owner_user_id=owner_user_id, model_code=model.code
+        ),
         min_closed_trades=SOAK_STEP2_MIN_CLOSED_TRADES,
         min_mean_r=SOAK_STEP2_MIN_MEAN_R,
         min_profit_factor=SOAK_STEP2_MIN_PROFIT_FACTOR,
@@ -905,19 +936,19 @@ async def soak_step2_progress(
         min_positive_month_fraction=SOAK_STEP2_MIN_POSITIVE_MONTH_FRACTION,
         min_trades_per_month=SOAK_STEP2_MIN_TRADES_PER_MONTH,
         max_extra_cost_bps=SOAK_STEP2_MAX_EXTRA_COST_BPS,
-        research_mean_r=SOAK_RESEARCH_MEAN_R,
-        research_win_rate=SOAK_RESEARCH_WIN_RATE,
+        research_mean_r=research_mean_r,
+        research_win_rate=research_win_rate,
     )
     return {
         "symbol": SOAK_SYMBOL,
-        "model_code": soak_incumbent().code,
-        "objective": soak_incumbent().objective.value,
+        "model_code": model.code,
+        "objective": model.objective.value,
         **sample,
         "step2_complete": bool(sample["all_gates_passed"]),
         "ready_for_holdout_review": bool(sample["all_gates_passed"]),
         "note": (
-            "Step 2 uses only closed SOL paper trades on the frozen V1 model. "
-            "Do not retune 2022–2026 to pass these gates."
+            f"Step 2 uses closed SOL paper trades for the selected profile "
+            f"({model.code}). Do not retune 2022–2026 to pass these gates."
         ),
     }
 
@@ -925,10 +956,14 @@ async def soak_step2_progress(
 async def soak_step3_progress(
     session: AsyncSession, *, owner_user_id: uuid.UUID
 ) -> dict[str, Any]:
+    _mean_r, _win_rate, model = await _active_research_benchmarks(session)
     step2 = await soak_step2_progress(session, owner_user_id=owner_user_id)
     return evaluate_holdout_review(
-        await _closed_soak_trades(session, owner_user_id=owner_user_id),
+        await _closed_soak_trades(
+            session, owner_user_id=owner_user_id, model_code=model.code
+        ),
         step2_complete=bool(step2["step2_complete"]),
+        model=model,
     )
 
 

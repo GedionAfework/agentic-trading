@@ -29,9 +29,11 @@ Status: **done** (2026-10-08). Journal: [SOAK_FREEZE.md](./SOAK_FREEZE.md).
 
 1. Confirm runtime routing: SOL paper models only; everything else `WAIT`.
 2. Confirm `VALIDATED_SPECIALIST_MODELS` is empty and `live_alerts_allowed` is false.
-3. Pick the paper profile and do not switch mid-soak without a written reason:
-   - `profit` → V1 **(active soak)**
-   - `win_rate` → V2 scale-out (frozen alternate)
+3. Pick the paper profile in the client (`GET/PUT /paper/trading-profile`) and do
+   not switch mid-soak without a written reason:
+   - `profit` → V1 expectancy **(default)**
+   - `win_rate` → V2 scale-out (higher WR, lower mean R)
+   Scanner `scanner.scan_all` follows the saved preference.
 4. Record the git SHA, model codes, fill model, and cost assumptions in the journal.
 
 **Done when:** scanner cannot publish live alerts, and a SOL `ENTER` is paper-eligible only.

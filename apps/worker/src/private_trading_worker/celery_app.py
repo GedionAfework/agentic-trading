@@ -220,16 +220,24 @@ def create_celery_app():
 
     @app.task(name="scanner.scan_all", bind=True, max_retries=0)
     def scan_all_task(self):  # type: ignore[no-untyped-def]
-        from private_trading_strategies.soak_freeze import (
-            SOAK_OBJECTIVE,
-            owner_test_symbols,
-        )
+        from private_trading_strategies.soak_freeze import owner_test_symbols
 
         # Owner 2-week set (BTC/ETH/SOL/DOGE). Unvalidated coins stay WAIT;
         # only registry paper models can auto-open paper trades.
-        return _run(
-            lambda: _scan_all_async(owner_test_symbols(), SOAK_OBJECTIVE.value)
-        )
+        # Objective comes from client trading-profile preference (V1/V2).
+        async def _scan_with_profile():
+            from private_trading_db.session import dispose_engine, get_session_factory
+            from private_trading_paper_trade.trading_profile import get_trading_objective
+
+            factory = get_session_factory()
+            try:
+                async with factory() as session:
+                    objective = await get_trading_objective(session)
+            finally:
+                await dispose_engine()
+            return await _scan_all_async(owner_test_symbols(), objective.value)
+
+        return _run(_scan_with_profile)
 
     @app.task(name="scanner.scan_symbols", bind=True, max_retries=0)
     def scan_symbols_task(self, symbols: list[str]):  # type: ignore[no-untyped-def]

@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
+from private_trading_core.errors import AppError
 from private_trading_db.services.audit import record_audit
 from private_trading_journal.service import list_journal_entries
 from private_trading_paper_trade.service import (
@@ -16,6 +17,11 @@ from private_trading_paper_trade.service import (
     list_trades,
     monitor_account,
 )
+from private_trading_paper_trade.trading_profile import (
+    set_trading_objective,
+    trading_profile_status,
+)
+from private_trading_strategies.trading_profile import parse_trading_objective
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from private_trading_api.deps import CurrentUser, get_correlation_id, get_current_user, get_db
@@ -27,6 +33,8 @@ from private_trading_api.schemas.paper import (
     PaperEventOut,
     PaperTradeDetailOut,
     PaperTradeOut,
+    TradingProfileChoice,
+    TradingProfileOut,
 )
 
 router = APIRouter(prefix="/paper", tags=["paper"])
@@ -92,8 +100,48 @@ async def get_account(
         soak_step3=summary.get("soak_step3") or {},
         soak_step4=summary.get("soak_step4") or {},
         soak_step5=summary.get("soak_step5") or {},
+        trading_profile=summary.get("trading_profile") or {},
         integrity=summary["integrity"],
     )
+
+
+@router.get("/trading-profile", response_model=TradingProfileOut)
+async def get_trading_profile(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> TradingProfileOut:
+    user.require_roles("owner", "admin", "viewer")
+    status = await trading_profile_status(session)
+    return TradingProfileOut(**status)
+
+
+@router.put("/trading-profile", response_model=TradingProfileOut)
+async def put_trading_profile(
+    body: TradingProfileChoice,
+    request: Request,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> TradingProfileOut:
+    user.require_roles("owner", "admin")
+    try:
+        objective = parse_trading_objective(body.objective)
+    except ValueError as exc:
+        raise AppError("VALIDATION_ERROR", str(exc), retryable=False) from exc
+    model = await set_trading_objective(
+        session, objective=objective, actor_user_id=user.id
+    )
+    await record_audit(
+        session,
+        action="paper.trading_profile_set",
+        actor_type="user",
+        actor_id=user.id,
+        resource_type="trading_profile",
+        correlation_id=get_correlation_id(request),
+        metadata={"objective": model.objective.value, "code": model.code},
+    )
+    await session.commit()
+    status = await trading_profile_status(session)
+    return TradingProfileOut(**status)
 
 
 @router.post("/account", response_model=PaperAccountOut)
@@ -131,6 +179,7 @@ async def post_account(
         soak_step3=summary.get("soak_step3") or {},
         soak_step4=summary.get("soak_step4") or {},
         soak_step5=summary.get("soak_step5") or {},
+        trading_profile=summary.get("trading_profile") or {},
         integrity=summary["integrity"],
     )
 

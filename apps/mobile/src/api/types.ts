@@ -43,6 +43,33 @@ export type CandidateOut = {
   last_seen_at: string;
 };
 
+export type TradingProfileOption = {
+  objective: "profit" | "win_rate";
+  code: string;
+  version_no: number;
+  symbol: string;
+  label: string;
+  summary: string;
+  selected: boolean;
+  paper_only: boolean;
+  live_alerts_allowed: boolean;
+  validation: {
+    trades: number;
+    win_rate: number;
+    mean_r: number;
+    profit_factor?: number | null;
+    method: string;
+  };
+};
+
+export type TradingProfileOut = {
+  selected_objective: "profit" | "win_rate";
+  selected_code: string;
+  selected_version_no: number;
+  profiles: TradingProfileOption[];
+  note: string;
+};
+
 export type PaperAccountOut = {
   account_id: string;
   label: string;
@@ -54,6 +81,7 @@ export type PaperAccountOut = {
   closed_trades: number;
   sum_realized_r: string;
   soak: Record<string, unknown>;
+  trading_profile?: TradingProfileOut;
   integrity: { ok: boolean; defects: string[] };
 };
 

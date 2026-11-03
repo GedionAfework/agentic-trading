@@ -233,3 +233,27 @@ Encoded as `doge-mtf-bos-volume-profit` v1 in `PAPER_MODEL_REGISTRY`
 (**paper-only**, live alerts blocked). Note: 2025–2026 folds were negative, so
 paper soak is required before any alert discussion. BTC/ETH remain WAIT (prior
 rejects). SOL V1 remains the primary soak incumbent.
+
+## 2026-10-22 — Step 6 v4 SOL 1d→1h scale-out (beat V2 WR?)
+
+Hypothesis: [STEP6_HYPOTHESIS_V4.md](./STEP6_HYPOTHESIS_V4.md). Catalog
+`sol-mtf-daily1h-scaleout-v4`. Unused stack (daily bias + 1h entry + scale-out).
+Nested yearly walk-forward, win-rate selection, SOL costs, 80-bar embargo.
+72 candidates. Script: `scripts/_daily1h_wr_challenger_walkforward.py`.
+
+| Year | Selected (abbrev.) | Trades | Win rate | Mean R |
+|---|---|---:|---:|---:|
+| 2022 | close50_slope vol≥1.5 partial@0.75R →2.5R | 12 | 50.0% | −0.221 |
+| 2023 | close50_slope vol≥1.5 partial@0.75R →2.5R | 82 | 61.0% | +0.067 |
+| 2024 | close50_slope vol≥1.5 partial@0.75R →2.5R | 84 | 50.0% | −0.089 |
+| 2025 | close50_slope vol≥1.5 partial@0.75R →3.0R | 57 | 45.6% | −0.258 |
+| 2026 | stack_slope vol≥1.5 partial@0.75R →2.5R | 19 | 63.2% | +0.081 |
+
+Combined: **254 trades**, **53.5%** wins, **−0.070R** mean, 0.84 PF, 30.28R DD.
+
+Failed gates: non-positive expectancy, PF, drawdown, positive-year fraction,
+did not beat V2 WR (58.9%) or V2 mean R (+0.059).
+
+**Decision: REJECT.** Not added to `PAPER_MODEL_REGISTRY`. Client picker stays
+V1 (expectancy) / V2 (win rate). Do not retune V2 on spent 4h→1h bars to force
+a higher WR.

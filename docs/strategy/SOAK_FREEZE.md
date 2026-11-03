@@ -77,3 +77,25 @@ and does not enable release alerts. Channel remains Telegram only.
 Step 6 (optional challenger) ran once: SOL `sol-mtf-daily4h-v3` (1d+4h)
 REJECT for insufficient trades (42 < 80). Does not change this freeze, the
 active soak model, or the empty specialist registry.
+
+## 2026-11-03 — client trading profile (V1 / V2), separate soak tracks
+
+The owner can now pick the active SOL paper model from the client
+(`GET/PUT /paper/trading-profile`, stored in system setting
+`paper_trading_profile`). Default stays `profit` → V1. `scanner.scan_all`
+reads the saved choice. This is a choice between two already-frozen
+incumbents, not a new model or a retune.
+
+To keep the freeze honest, **V1 and V2 are scored as separate soak samples**:
+
+- Each SOL paper trade is attributed by `fill_model.paper_model_code`. Rows
+  from before this change only carry `soak_freeze_model` and count as V1.
+- `soak_step1`–`soak_step3` use only closed trades for the selected profile,
+  and benchmark against that model's own walk-forward (V1 +0.215R / 40.9%;
+  V2 +0.059R / 58.9%). The Step 3 competitive floor is half of the selected
+  model's research mean R.
+- Switching profiles does not reset or merge either sample; switching back
+  resumes the earlier track.
+
+Rule unchanged: do not switch mid-soak without a written reason in this
+journal. Active profile at time of writing: `profit` (V1).
