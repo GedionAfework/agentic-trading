@@ -188,6 +188,20 @@ paper trade opens; open trades are still monitored to exit. The supervisor
 Alerts go to Telegram only when a new finding appears, plus one all-clear.
 State: `GET /v1/paper/supervisor`; manual run: `POST /v1/paper/supervisor/run`.
 
+## Coin desk (copilot surface)
+
+`GET /v1/desk/coins`, Telegram `/coins` + `/why COIN`, mobile **Coins** tab.
+For BTC/ETH/SOL/DOGE: last closed-candle verdict, role (paper model /
+watch only / no model for the selected profile), plain-language reasons,
+open paper trade, portfolio refusals, supervisor pause, soak progress.
+Text is built from computed fields only and never authorizes a trade.
+
+Scan runs now log `reasons`, `explanation`, `risk_approved` and ENTER
+`levels` in `details` (logging only; decisions unchanged).
+
+Note: the scanner uses one objective for every coin. DOGE only has a
+`profit` model, so the `win_rate` profile puts DOGE on WAIT. The desk says so.
+
 ## Agentic shadow (optional, off by default)
 
 During paper soak you may set `AGENTIC_SHADOW_ENABLED=true` so AG-01 runs

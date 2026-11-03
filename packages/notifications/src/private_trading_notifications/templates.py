@@ -241,6 +241,8 @@ def help_text(*, linked: bool) -> str:
     return "\n".join(
         [
             "<b>Commands</b>",
+            "/coins — status of BTC/ETH/SOL/DOGE (why WAIT/ENTER)",
+            "/why COIN — full reasons for one coin, e.g. <code>/why sol</code>",
             "/setups — recent setup candidates",
             "/markets — data freshness per market",
             "/strategies — registered strategies",

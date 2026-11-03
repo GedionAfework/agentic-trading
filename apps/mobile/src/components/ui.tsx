@@ -19,12 +19,19 @@ export function Screen({ children, style, ...rest }: ViewProps) {
   );
 }
 
-export function ScreenScroll({ children }: { children: React.ReactNode }) {
+export function ScreenScroll({
+  children,
+  refreshControl,
+}: {
+  children: React.ReactNode;
+  refreshControl?: React.ComponentProps<typeof ScrollView>["refreshControl"];
+}) {
   return (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
+      refreshControl={refreshControl}
     >
       {children}
     </ScrollView>

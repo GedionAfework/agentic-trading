@@ -122,6 +122,7 @@ export const api = {
   documents: () => apiRequest<Array<Record<string, unknown>>>("/knowledge/documents"),
   strategies: () => apiRequest<Array<Record<string, unknown>>>("/strategies"),
   paperAccount: () => apiRequest<import("./types").PaperAccountOut>("/paper/account"),
+  coinDesk: () => apiRequest<import("./types").CoinDeskOut>("/desk/coins"),
   tradingProfile: () =>
     apiRequest<import("./types").TradingProfileOut>("/paper/trading-profile"),
   setTradingProfile: (objective: "profit" | "win_rate") =>

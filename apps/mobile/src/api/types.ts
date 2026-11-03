@@ -203,3 +203,34 @@ export type ApiErrorBody = {
   };
   detail?: unknown;
 };
+
+export type DeskCoin = {
+  symbol: string;
+  headline: string;
+  role: "paper" | "inactive_for_profile" | "watch";
+  model_code: string | null;
+  regimes: string[];
+  research: { trades: number; win_rate: number; mean_r: number } | null;
+  context: string;
+  last_scan: { candle_open_time: string | null; status: string | null; action: string | null } | null;
+  levels: { entry: string | null; stop: string | null; target: string | null; rr: string | null } | null;
+  open_trade: Record<string, unknown> | null;
+  reasons: string[];
+  authorizes_trade: false;
+};
+
+export type CoinDeskOut = {
+  generated_at: string;
+  profile: { objective: "profit" | "win_rate"; model_code: string };
+  supervisor: { paper_auto_open_enabled: boolean; pause_reasons: string[] };
+  portfolio: { crypto_open_risk_pct: string; crypto_headroom_pct: string; daily_loss_stop_hit: boolean };
+  soak: {
+    model_code: string | null;
+    closed_trades: number | null;
+    min_closed_trades: number | null;
+    mean_r: number | null;
+    win_rate: number | null;
+  };
+  coins: DeskCoin[];
+  authorizes_trade: false;
+};

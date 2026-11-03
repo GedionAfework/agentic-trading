@@ -87,6 +87,8 @@ class BotRepository(Protocol):
 
     async def performance_summary(self, *, user_id: uuid.UUID) -> dict[str, Any]: ...
 
+    async def coin_desk(self, *, user_id: uuid.UUID) -> dict[str, Any]: ...
+
 
 def _parse_command(text: str) -> tuple[str, list[str]] | None:
     stripped = text.strip()
@@ -227,6 +229,14 @@ async def _handle_command(
         result.replies.append(
             BotReply(chat_id=chat_id, text=templates.performance_summary(summary))
         )
+    elif name in ("/coins", "/status"):
+        from private_trading_agents.coin_desk import narrate_desk
+
+        view = await repo.coin_desk(user_id=account.user_id)
+        result.handled = "coins"
+        result.replies.append(BotReply(chat_id=chat_id, text=narrate_desk(view)))
+    elif name == "/why":
+        await _handle_why(args, account, result, repo)
     elif name == "/settings":
         await _handle_settings(args, account, result, repo)
     else:
@@ -238,6 +248,27 @@ async def _handle_command(
             )
         )
     return result
+
+
+async def _handle_why(
+    args: list[str], account: LinkedAccount, result: HandledUpdate, repo: BotRepository
+) -> None:
+    from private_trading_agents.coin_desk import narrate_coin, resolve_coin
+
+    view = await repo.coin_desk(user_id=account.user_id)
+    symbols = tuple(coin["symbol"] for coin in view["coins"])
+    symbol = resolve_coin(args[0], symbols) if args else None
+    if symbol is None:
+        result.handled = "why_usage"
+        names = ", ".join(s.split("/")[0].lower() for s in symbols)
+        result.replies.append(
+            BotReply(chat_id=account.chat_id, text=f"Usage: <code>/why COIN</code> ({names})")
+        )
+        return
+    coin = next(c for c in view["coins"] if c["symbol"] == symbol)
+    result.handled = "why"
+    result.meta["symbol"] = symbol
+    result.replies.append(BotReply(chat_id=account.chat_id, text=narrate_coin(coin)))
 
 
 async def _handle_settings(

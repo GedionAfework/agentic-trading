@@ -37,6 +37,7 @@ from private_trading_agents.scanner import (
     should_auto_open_paper,
 )
 from private_trading_agents.service import persist_decision
+from private_trading_agents.workflow import DecisionAction
 
 # paper_auto_open_enabled: the supervisor may set it false; only the owner sets it true.
 SWITCH_KEYS = ("scanner_enabled", "notifications_enabled", "paper_auto_open_enabled")
@@ -312,6 +313,20 @@ async def scan_instrument_timeframe(
         run.action = outcome.action
         run.setup_state = outcome.setup_state
         run.details["notes"] = outcome.notes
+        if outcome.snapshot is not None:
+            # Record why (not just what) so the coin desk can explain WAIT/ENTER.
+            # Logging only: does not change the decision or what gets opened.
+            snap = outcome.snapshot
+            run.details["reasons"] = list(snap.hard_blockers)
+            run.details["explanation"] = (snap.explanation or "")[:600]
+            run.details["risk_approved"] = bool(snap.risk_approved)
+            if snap.action == DecisionAction.ENTER:
+                run.details["levels"] = {
+                    "entry": None if snap.entry_price is None else str(snap.entry_price),
+                    "stop": None if snap.stop_price is None else str(snap.stop_price),
+                    "target": None if snap.target_price is None else str(snap.target_price),
+                    "rr": None if snap.rr_ratio is None else str(snap.rr_ratio),
+                }
         if outcome.publishable or outcome.paper_eligible:
             owner = owner_user_id or await resolve_owner_user_id(session)
             if owner is None:
