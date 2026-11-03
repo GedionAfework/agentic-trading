@@ -217,6 +217,11 @@ def narrate_desk(view: dict[str, Any]) -> str:
         icon = _ICON.get(coin["headline"], "⚪")
         first = coin["reasons"][0] if coin["reasons"] else ""
         lines.append(f"{icon} <b>{coin['symbol']}</b> {coin['headline']} · {first}")
+    regime = view.get("btc_regime") or {}
+    if regime:
+        lines.append(
+            f"BTC regime (shadow, not a filter): <b>{regime.get('label', 'unknown')}</b>"
+        )
     soak = view.get("soak") or {}
     if soak:
         lines.append(
@@ -261,6 +266,7 @@ async def coin_desk_status(session: Any, *, owner_user_id: uuid.UUID) -> dict[st
     """Load state and describe every owner coin. Read-only."""
     from private_trading_db.models.paper import PaperTrade
     from private_trading_db.models.scanner import ScanRun
+    from private_trading_paper_trade.btc_shadow import btc_regime_shadow_report
     from private_trading_paper_trade.engine import STATUS_OPEN, STATUS_READY
     from private_trading_paper_trade.service import (
         portfolio_status,
@@ -333,6 +339,17 @@ async def coin_desk_status(session: Any, *, owner_user_id: uuid.UUID) -> dict[st
             )
         )
     soak = await soak_step1_progress(session, owner_user_id=owner_user_id)
+    latest_tagged = (
+        await session.execute(
+            select(ScanRun)
+            .where(ScanRun.details["btc_regime"].astext.is_not(None))
+            .order_by(ScanRun.candle_open_time.desc(), ScanRun.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    btc_regime = (
+        dict(latest_tagged.details.get("btc_regime") or {}) if latest_tagged else {}
+    )
     return {
         "generated_at": now.isoformat(),
         "profile": {
@@ -356,5 +373,9 @@ async def coin_desk_status(session: Any, *, owner_user_id: uuid.UUID) -> dict[st
             "win_rate": soak.get("win_rate"),
         },
         "coins": coins,
+        "btc_regime": btc_regime,
+        "btc_regime_shadow": await btc_regime_shadow_report(
+            session, owner_user_id=owner_user_id
+        ),
         "authorizes_trade": False,
     }

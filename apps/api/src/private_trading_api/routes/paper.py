@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from private_trading_core.errors import AppError
 from private_trading_db.services.audit import record_audit
 from private_trading_journal.service import list_journal_entries
+from private_trading_paper_trade.btc_shadow import btc_regime_shadow_report
 from private_trading_paper_trade.service import (
     accept_decision,
     account_summary,
@@ -116,6 +117,16 @@ async def get_portfolio(
     """Read-only portfolio gate view: caps, headroom, per-coin verdicts."""
     user.require_roles("owner", "admin", "viewer")
     return PortfolioStatusOut(**await portfolio_status(session, owner_user_id=user.id))
+
+
+@router.get("/btc-regime-shadow")
+async def get_btc_regime_shadow(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Closed paper trades split by BTC regime tag (forward-only, shadow)."""
+    user.require_roles("owner", "admin", "viewer")
+    return await btc_regime_shadow_report(session, owner_user_id=user.id)
 
 
 @router.get("/supervisor")

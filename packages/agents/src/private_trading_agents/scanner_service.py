@@ -93,6 +93,38 @@ async def resolve_owner_user_id(session: AsyncSession) -> uuid.UUID | None:
     return result.scalar_one_or_none()
 
 
+async def _btc_regime_tag(
+    session: AsyncSession, *, decision_open_time: datetime
+) -> dict[str, Any]:
+    """BTC regime as of the 1h decision candle close. Shadow tag only.
+
+    Uses BTC 4h candles that had fully closed by the time the 1h decision
+    candle closed, so the tag never peeks ahead.
+    """
+    from datetime import timedelta
+
+    from private_trading_strategies.btc_regime import (
+        BTC_REGIME_SYMBOL,
+        BTC_REGIME_TIMEFRAME,
+        classify_btc_regime,
+    )
+
+    try:
+        btc = await get_instrument_by_symbol(session, BTC_REGIME_SYMBOL)
+        if btc is None:
+            return classify_btc_regime([]).as_dict()
+        bars = await load_final_bars(
+            session, instrument_id=btc.id, timeframe=BTC_REGIME_TIMEFRAME, limit=300
+        )
+        decision_close = decision_open_time + timedelta(hours=1)
+        closed = [b for b in bars if b.open_time + timedelta(hours=4) <= decision_close]
+        return classify_btc_regime(closed).as_dict()
+    except Exception as exc:  # noqa: BLE001 — a shadow tag must never break a scan
+        tag = classify_btc_regime([]).as_dict()
+        tag["error"] = f"{type(exc).__name__}"[:80]
+        return tag
+
+
 async def load_final_bars(
     session: AsyncSession, *, instrument_id: uuid.UUID, timeframe: str, limit: int = 200
 ) -> list[CandleBar]:
@@ -309,6 +341,11 @@ async def scan_instrument_timeframe(
                 open_exposures=exposures,
                 daily_realized_pnl_pct=daily_pnl,
             )
+            # SHADOW ONLY: tag BTC regime; never gates or sizes anything.
+            regime_tag = await _btc_regime_tag(session, decision_open_time=candle_open_time)
+            run.details["btc_regime"] = regime_tag
+            if outcome.snapshot is not None:
+                outcome.snapshot.evidence["btc_regime_shadow"] = regime_tag
         run.status = outcome.status
         run.action = outcome.action
         run.setup_state = outcome.setup_state

@@ -232,5 +232,14 @@ export type CoinDeskOut = {
     win_rate: number | null;
   };
   coins: DeskCoin[];
+  btc_regime: { label?: "risk_on" | "risk_off" | "unknown"; bar_open_time?: string | null };
+  btc_regime_shadow: {
+    models: {
+      model_code: string;
+      risk_on: { trades: number; win_rate: number | null; mean_r: number | null };
+      risk_off: { trades: number; win_rate: number | null; mean_r: number | null };
+      verdict: string;
+    }[];
+  };
   authorizes_trade: false;
 };

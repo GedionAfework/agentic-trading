@@ -97,6 +97,15 @@ export default function CoinsScreen() {
               Crypto risk {data.portfolio.crypto_open_risk_pct}% open · {data.portfolio.crypto_headroom_pct}% free
               {data.portfolio.daily_loss_stop_hit ? " · daily loss stop hit" : ""}
             </Muted>
+            <Muted>
+              BTC regime (shadow, not a filter): {data.btc_regime?.label ?? "unknown"}
+            </Muted>
+            {data.btc_regime_shadow?.models.map((m) => (
+              <Muted key={m.model_code}>
+                {m.model_code}: risk-on {m.risk_on.trades} / risk-off {m.risk_off.trades} closed ·{" "}
+                {m.verdict}
+              </Muted>
+            ))}
           </Card>
           {data.coins.map((coin) => (
             <CoinCard key={coin.symbol} coin={coin} />

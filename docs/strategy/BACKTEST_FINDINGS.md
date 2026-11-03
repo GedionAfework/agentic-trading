@@ -257,3 +257,38 @@ did not beat V2 WR (58.9%) or V2 mean R (+0.059).
 **Decision: REJECT.** Not added to `PAPER_MODEL_REGISTRY`. Client picker stays
 V1 (expectancy) / V2 (win rate). Do not retune V2 on spent 4h→1h bars to force
 a higher WR.
+
+## 2026-11-03 — BTC regime split, frozen 4h→1h model on the owner coins (informational)
+
+Script: `scripts/_btc_regime_check.py`. Binance 2022-01-01..2026-11-03.
+No search: frozen V1 config (4h stack_slope, 1h BOS, vol≥2, ≤2 ATR, 3R,
+80 bars) and one pre-declared BTC rule (BTC 4h close>EMA12>EMA21>EMA50,
+EMA50 rising over 10 candles; risk-on 29.9% of bars). **Spent data**: this
+same BTC agreement option was already in V1's grid and was not selected.
+Harness reproduces the SOL V1 registry exactly (164 / 40.9% / +0.215R).
+
+| Coin | All trades | BTC risk-on | BTC risk-off |
+|---|---|---|---|
+| BTC | 196 · 28.6% · −0.238R | (own trend) | — |
+| ETH | 167 · 32.9% · −0.154R | 135 · 34.8% · −0.088R | 47 · 36.2% · −0.115R |
+| SOL | 164 · 40.9% · **+0.215R** | 134 · 39.6% · +0.129R | 54 · 40.7% · +0.227R |
+| DOGE | 160 · 37.5% · +0.085R | 134 · 38.1% · +0.125R | 38 · 36.8% · +0.030R |
+
+(risk-on + risk-off can exceed All: filtering frees the one-position slot.)
+
+Read:
+
+- **SOL:** a BTC filter would *hurt* (+0.129R on vs +0.215R all). Consistent
+  with the original walk-forward rejecting it. Do not add.
+- **DOGE:** risk-on looks better (+0.125R vs +0.030R), but risk-off is 38
+  trades and years disagree (2026 risk-on −0.568R). Not evidence. Note this
+  simple harness gives DOGE +0.085R vs the registry's nested-WF +0.173R;
+  2026 is negative either way, so DOGE stays on probation.
+- **BTC / ETH:** negative with or without the filter. The BTC regime does not
+  rescue them; they stay watch-only.
+
+**Decision:** no filter. BTC regime ships as a **shadow tag only** on every
+scan/decision (`btc_regime_shadow`), and `GET /v1/paper/btc-regime-shadow`
+splits *forward* closed paper trades by it. Revisit only when each bucket
+has ≥30 closed paper trades per model, and then only as a new written
+hypothesis with its own walk-forward.
