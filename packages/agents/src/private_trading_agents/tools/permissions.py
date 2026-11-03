@@ -50,7 +50,7 @@ _RAW_ALLOWLIST: dict[AgentId, frozenset[ToolId]] = {
     AgentId.AG03_VISION: _AG03_TOOLS,
     AgentId.AG04_MARKET_DATA: frozenset({ToolId.FEATURES_COMPUTE}),
     AgentId.AG05_STRATEGY: frozenset({ToolId.STRATEGY_EVALUATE}),
-    AgentId.AG06_RISK: frozenset({ToolId.RISK_ASSESS}),
+    AgentId.AG06_RISK: frozenset({ToolId.RISK_ASSESS, ToolId.RISK_PORTFOLIO_STATUS}),
     AgentId.AG07_SIGNAL: frozenset({ToolId.SIGNAL_CHECK_GATES}),
     AgentId.AG08_JOURNAL: frozenset(
         {

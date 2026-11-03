@@ -44,6 +44,31 @@ class TradingProfileOut(BaseModel):
     note: str = ""
 
 
+class PortfolioSymbolVerdictOut(BaseModel):
+    symbol: str
+    proposed_risk_pct: str
+    portfolio_allows_open: bool
+    blockers: list[str] = Field(default_factory=list)
+
+
+class PortfolioStatusOut(BaseModel):
+    open_positions: list[dict[str, Any]] = Field(default_factory=list)
+    total_open_risk_pct: str
+    total_open_risk_cap_pct: str
+    total_headroom_pct: str
+    crypto_open_risk_pct: str
+    crypto_cluster_cap_pct: str
+    crypto_headroom_pct: str
+    daily_realized_pnl_pct: str
+    daily_loss_stop_pct: str
+    daily_loss_stop_hit: bool
+    one_position_per_symbol: bool
+    symbols: list[PortfolioSymbolVerdictOut]
+    recent_blocked_opens: list[dict[str, Any]] = Field(default_factory=list)
+    authorizes_trade: Literal[False] = False
+    note: str = ""
+
+
 class PaperTradeOut(BaseModel):
     id: uuid.UUID
     account_id: uuid.UUID

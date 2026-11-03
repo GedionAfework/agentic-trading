@@ -45,6 +45,11 @@ from private_trading_agents.tools.journal_schemas import (
     JournalSummarizeIn,
     JournalSummarizeOut,
 )
+from private_trading_agents.tools.portfolio_handlers import handle_portfolio_status
+from private_trading_agents.tools.portfolio_schemas import (
+    PortfolioStatusIn,
+    PortfolioStatusOut,
+)
 from private_trading_agents.tools.routing_handlers import (
     handle_agent_run_journal,
     handle_agent_run_knowledge,
@@ -115,6 +120,15 @@ TOOL_CATALOG: dict[ToolId, ToolSpec] = {
         input_model=RiskAssessIn,
         output_model=RiskAssessOut,
         handler=handle_risk_assess,
+    ),
+    ToolId.RISK_PORTFOLIO_STATUS: ToolSpec(
+        tool_id=ToolId.RISK_PORTFOLIO_STATUS,
+        description="Read-only portfolio caps, headroom and per-symbol verdicts; "
+        "never authorizes a trade.",
+        side_effect=SideEffect.NONE,
+        input_model=PortfolioStatusIn,
+        output_model=PortfolioStatusOut,
+        handler=handle_portfolio_status,
     ),
     ToolId.EXPLAIN_GROUNDED: ToolSpec(
         tool_id=ToolId.EXPLAIN_GROUNDED,

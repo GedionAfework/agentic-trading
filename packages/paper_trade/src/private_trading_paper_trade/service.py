@@ -12,13 +12,14 @@ from private_trading_db.models.decision_record import DecisionRecord
 from private_trading_db.models.market import Candle, Instrument
 from private_trading_db.models.ops import OutboxEvent, SystemSetting
 from private_trading_db.models.paper import PaperAccount, PaperTrade, PaperTradeEvent
-from private_trading_db.models.scanner import SignalCandidate
+from private_trading_db.models.scanner import ScanRun, SignalCandidate
 from private_trading_features.types import CandleBar
 from private_trading_journal.service import create_paper_journal_entry
 from private_trading_risk.portfolio import (
     OpenExposure,
     PortfolioRiskInput,
     assess_portfolio_risk,
+    portfolio_headroom,
 )
 from private_trading_risk.sizing import paper_quantity
 from private_trading_strategies.soak_freeze import (
@@ -190,6 +191,20 @@ def _invalidation_from_record(record: DecisionRecord) -> Decimal | None:
     return None
 
 
+def effective_fill_model(account: PaperAccount, symbol: str) -> dict[str, Any]:
+    """Fill model a paper open on ``symbol`` would use (SOL gets the soak overrides)."""
+    fill_model = dict(account.fill_model or default_fill_model())
+    if symbol == SOAK_SYMBOL:
+        notes = list(fill_model.get("notes") or [])
+        soak_notes = list(SOAK_FILL_MODEL.get("notes") or [])
+        fill_model.update(
+            {key: value for key, value in SOAK_FILL_MODEL.items() if key != "notes"}
+        )
+        fill_model["notes"] = notes + [note for note in soak_notes if note not in notes]
+        fill_model["soak_freeze_model"] = soak_incumbent().code
+    return fill_model
+
+
 async def plan_from_decision(
     session: AsyncSession,
     *,
@@ -213,15 +228,7 @@ async def plan_from_decision(
             "Decision is missing entry/stop/target — refusing invent",
             retryable=False,
         )
-    fill_model = dict(account.fill_model or default_fill_model())
-    if record.symbol == SOAK_SYMBOL:
-        notes = list(fill_model.get("notes") or [])
-        soak_notes = list(SOAK_FILL_MODEL.get("notes") or [])
-        fill_model.update(
-            {key: value for key, value in SOAK_FILL_MODEL.items() if key != "notes"}
-        )
-        fill_model["notes"] = notes + [note for note in soak_notes if note not in notes]
-        fill_model["soak_freeze_model"] = soak_incumbent().code
+    fill_model = effective_fill_model(account, record.symbol)
     exposures, daily_pnl = await paper_portfolio_state(
         session, owner_user_id=account.owner_user_id
     )
@@ -728,6 +735,56 @@ async def paper_portfolio_state(
     equity = _d(account.starting_equity) if account is not None else Decimal("0")
     daily_pct = (pnl / equity * Decimal("100")) if equity > 0 else Decimal("0")
     return exposures, daily_pct
+
+
+async def portfolio_status(
+    session: AsyncSession,
+    *,
+    owner_user_id: uuid.UUID,
+    recent_blocked_limit: int = 10,
+) -> dict[str, Any]:
+    """Read-only portfolio gate view for the owner's coin set.
+
+    Verdicts reuse the same gate that refuses paper opens. ``portfolio_allows_open``
+    only means the portfolio caps have room; the coin still needs a validated
+    paper model and an ENTER on a closed candle.
+    """
+    from private_trading_strategies.soak_freeze import owner_test_symbols
+
+    exposures, daily_pnl = await paper_portfolio_state(session, owner_user_id=owner_user_id)
+    account = await get_account(session, owner_user_id=owner_user_id)
+    candidates: dict[str, Decimal] = {}
+    for symbol in owner_test_symbols():
+        if account is None:
+            candidates[symbol] = risk_pct(default_fill_model())
+        else:
+            candidates[symbol] = risk_pct(effective_fill_model(account, symbol))
+    view = portfolio_headroom(
+        open_exposures=exposures,
+        daily_realized_pnl_pct=daily_pnl,
+        candidates=candidates,
+    )
+    blocked_rows = await session.execute(
+        select(ScanRun)
+        .where(ScanRun.details["paper_open_blocked"].astext.is_not(None))
+        .order_by(ScanRun.created_at.desc())
+        .limit(recent_blocked_limit)
+    )
+    view["recent_blocked_opens"] = [
+        {
+            "symbol": run.instrument_symbol,
+            "candle_open_time": run.candle_open_time.isoformat(),
+            "code": (run.details or {}).get("paper_open_blocked"),
+            "error": (run.details or {}).get("paper_open_error"),
+        }
+        for run in blocked_rows.scalars().all()
+    ]
+    view["note"] = (
+        "Portfolio caps sum risk across open crypto positions (correlated coins "
+        "count as one bet). A free cap does not mean a trade: the coin still "
+        "needs a validated paper model and an ENTER signal."
+    )
+    return view
 
 
 async def list_trades(

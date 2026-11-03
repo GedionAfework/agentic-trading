@@ -154,6 +154,18 @@ BTC/ETH/BNB/FX stay research-only until a challenger passes this step on that sy
 A later Step 6 version needs a different unused idea (or more calendar data),
 not a looser trade-count gate on this catalog.
 
+## Portfolio gate visibility (read-only)
+
+Paper opens are already refused by the portfolio gate (one position per coin,
+crypto cluster cap 1% summed risk, total 2%, daily loss stop −1.5%). With SOL
+and DOGE at 0.5% each, both can be open together and that fills the crypto
+cluster; correlated coins count as one bet. Rules unchanged during the soak.
+
+`GET /paper/portfolio` and AG-06 tool `risk.portfolio_status` show caps,
+headroom, per-coin verdicts (BTC/ETH/SOL/DOGE) and recent refused opens.
+Verdicts call the same gate function, so the view cannot disagree with it.
+`authorizes_trade` is always false: free headroom never means a trade.
+
 ## Agentic shadow (optional, off by default)
 
 During paper soak you may set `AGENTIC_SHADOW_ENABLED=true` so AG-01 runs

@@ -16,6 +16,7 @@ from private_trading_paper_trade.service import (
     list_events,
     list_trades,
     monitor_account,
+    portfolio_status,
 )
 from private_trading_paper_trade.trading_profile import (
     set_trading_objective,
@@ -33,6 +34,7 @@ from private_trading_api.schemas.paper import (
     PaperEventOut,
     PaperTradeDetailOut,
     PaperTradeOut,
+    PortfolioStatusOut,
     TradingProfileChoice,
     TradingProfileOut,
 )
@@ -103,6 +105,16 @@ async def get_account(
         trading_profile=summary.get("trading_profile") or {},
         integrity=summary["integrity"],
     )
+
+
+@router.get("/portfolio", response_model=PortfolioStatusOut)
+async def get_portfolio(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> PortfolioStatusOut:
+    """Read-only portfolio gate view: caps, headroom, per-coin verdicts."""
+    user.require_roles("owner", "admin", "viewer")
+    return PortfolioStatusOut(**await portfolio_status(session, owner_user_id=user.id))
 
 
 @router.get("/trading-profile", response_model=TradingProfileOut)

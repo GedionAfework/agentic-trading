@@ -120,3 +120,75 @@ def specialist_risk_pct(
     if max_drawdown_r is not None and max_drawdown_r > 15:
         risk -= Decimal("0.10")
     return min(Decimal("0.5"), max(Decimal("0.1"), risk))
+
+
+def _asset_class(symbol: str) -> str:
+    return "crypto" if symbol.endswith("/USDT") else "forex"
+
+
+def portfolio_headroom(
+    *,
+    open_exposures: tuple[OpenExposure, ...],
+    daily_realized_pnl_pct: Decimal,
+    candidates: dict[str, Decimal],
+    direction: str = "long",
+    policy: PortfolioRiskPolicy | None = None,
+) -> dict[str, object]:
+    """Read-only view of the portfolio gate: room left and per-symbol verdicts.
+
+    ``candidates`` maps symbol -> the risk % a paper open would use. Every
+    verdict comes from :func:`assess_portfolio_risk`, so this view cannot
+    disagree with the gate that actually refuses opens. It never authorizes
+    a trade: a symbol can still need a validated model and an ENTER signal.
+    """
+    cfg = policy or PortfolioRiskPolicy()
+    zero = Decimal("0")
+    total = sum((item.risk_pct for item in open_exposures), zero)
+    crypto = sum(
+        (item.risk_pct for item in open_exposures if item.asset_class == "crypto"),
+        zero,
+    )
+    verdicts: list[dict[str, object]] = []
+    for symbol, proposed in candidates.items():
+        result = assess_portfolio_risk(
+            PortfolioRiskInput(
+                proposed_symbol=symbol,
+                proposed_asset_class=_asset_class(symbol),
+                proposed_direction=direction,
+                proposed_risk_pct=proposed,
+                open_exposures=open_exposures,
+                daily_realized_pnl_pct=daily_realized_pnl_pct,
+            ),
+            cfg,
+        )
+        verdicts.append(
+            {
+                "symbol": symbol,
+                "proposed_risk_pct": str(proposed),
+                "portfolio_allows_open": result.approved,
+                "blockers": list(result.blockers),
+            }
+        )
+    return {
+        "open_positions": [
+            {
+                "symbol": item.symbol,
+                "asset_class": item.asset_class,
+                "direction": item.direction,
+                "risk_pct": str(item.risk_pct),
+            }
+            for item in open_exposures
+        ],
+        "total_open_risk_pct": str(total),
+        "total_open_risk_cap_pct": str(cfg.max_total_open_risk_pct),
+        "total_headroom_pct": str(max(zero, cfg.max_total_open_risk_pct - total)),
+        "crypto_open_risk_pct": str(crypto),
+        "crypto_cluster_cap_pct": str(cfg.max_crypto_open_risk_pct),
+        "crypto_headroom_pct": str(max(zero, cfg.max_crypto_open_risk_pct - crypto)),
+        "daily_realized_pnl_pct": str(daily_realized_pnl_pct),
+        "daily_loss_stop_pct": str(-cfg.max_daily_loss_pct),
+        "daily_loss_stop_hit": daily_realized_pnl_pct <= -cfg.max_daily_loss_pct,
+        "one_position_per_symbol": cfg.one_position_per_symbol,
+        "symbols": verdicts,
+        "authorizes_trade": False,
+    }

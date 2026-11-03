@@ -8,6 +8,7 @@ from private_trading_risk.portfolio import (
     PortfolioRiskPolicy,
     PortfolioRiskResult,
     assess_portfolio_risk,
+    portfolio_headroom,
     specialist_risk_pct,
 )
 from private_trading_risk.types import (
@@ -31,6 +32,7 @@ __all__ = [
     "WeekendPolicy",
     "assess_risk",
     "assess_portfolio_risk",
+    "portfolio_headroom",
     "default_policy_config",
     "specialist_risk_pct",
 ]

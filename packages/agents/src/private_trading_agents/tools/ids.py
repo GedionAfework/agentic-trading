@@ -12,6 +12,7 @@ class ToolId(StrEnum):
     FEATURES_COMPUTE = "features.compute"
     STRATEGY_EVALUATE = "strategy.evaluate"
     RISK_ASSESS = "risk.assess"
+    RISK_PORTFOLIO_STATUS = "risk.portfolio_status"
     EXPLAIN_GROUNDED = "explain.grounded"
     SIGNAL_CHECK_GATES = "signal.check_gates"
     VISION_CHECK_VERDICT = "vision.check_verdict"
