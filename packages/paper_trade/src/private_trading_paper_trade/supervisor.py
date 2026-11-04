@@ -97,6 +97,32 @@ async def _model_samples(
     return [ModelSample(code=code, trades=trades) for code, trades in sorted(grouped.items())]
 
 
+async def _challenger_samples(session: AsyncSession) -> list[ModelSample]:
+    """Challenger virtual ledgers, judged by the same kill rules but alert-only."""
+    from private_trading_paper_trade.challenger import challenger_status
+
+    out: list[ModelSample] = []
+    for state in await challenger_status(session):
+        rows = state.get("trades") or []
+        if not rows:
+            continue
+        out.append(
+            ModelSample(
+                code=f"{state['code']}-v{state['version_no']} (challenger)",
+                trades=[
+                    ClosedSoakTrade(
+                        realized_r=float(r["r"]),
+                        closed_at=datetime.fromisoformat(r["exit_time"]),
+                        extra_cost_bps_vs_research=None,
+                    )
+                    for r in rows
+                ],
+                alert_only=True,
+            )
+        )
+    return out
+
+
 async def _stale_symbols(session: AsyncSession, *, now: datetime) -> list[str]:
     from private_trading_strategies.soak_freeze import owner_test_symbols
 
@@ -143,8 +169,10 @@ async def collect_snapshot(
             )
         )
     ).scalar_one()
+    samples = await _model_samples(session, owner_user_id=owner_user_id)
+    samples.extend(await _challenger_samples(session))
     return SupervisorSnapshot(
-        samples=await _model_samples(session, owner_user_id=owner_user_id),
+        samples=samples,
         stale_symbols=await _stale_symbols(session, now=now),
         integrity_defects=defects,
         failed_scan_runs=int(failed or 0),

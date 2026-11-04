@@ -21,6 +21,7 @@ SCAN_INTERVAL_SECONDS = 60
 DISPATCH_INTERVAL_SECONDS = 30
 PAPER_MONITOR_INTERVAL_SECONDS = 60
 SUPERVISOR_INTERVAL_SECONDS = 900  # 15 min; kill rules move on closed trades
+CHALLENGER_INTERVAL_SECONDS = 3600  # forward ledger on closed 1h candles
 
 
 def _timeframes() -> tuple[str, ...]:
@@ -203,6 +204,21 @@ async def _supervise_paper_async() -> dict[str, Any]:
             await dispose_engine()
 
 
+async def _challengers_async() -> dict[str, Any]:
+    from private_trading_agents.scanner_service import resolve_owner_user_id
+    from private_trading_db.session import dispose_engine, get_session_factory
+    from private_trading_paper_trade.challenger import run_challenger_ledger
+
+    factory = get_session_factory()
+    try:
+        async with factory() as session:
+            owner = await resolve_owner_user_id(session)
+            state = await run_challenger_ledger(session, owner_user_id=owner)
+            return {"status": state.get("status"), "challenger": state.get("challenger")}
+    finally:
+        await dispose_engine()
+
+
 def create_celery_app():
     if Celery is None:
         raise RuntimeError("celery is not installed; run `uv sync`")
@@ -218,6 +234,7 @@ def create_celery_app():
             "notifications.dispatch": {"queue": "notifications"},
             "paper.monitor": {"queue": "market"},
             "paper.supervise": {"queue": "market"},
+            "paper.challengers": {"queue": "market"},
         },
         task_acks_late=True,
         task_reject_on_worker_lost=True,
@@ -245,6 +262,10 @@ def create_celery_app():
             "supervise-paper": {
                 "task": "paper.supervise",
                 "schedule": schedule(run_every=SUPERVISOR_INTERVAL_SECONDS),
+            },
+            "paper-challengers": {
+                "task": "paper.challengers",
+                "schedule": schedule(run_every=CHALLENGER_INTERVAL_SECONDS),
             },
         },
     )
@@ -296,6 +317,10 @@ def create_celery_app():
     @app.task(name="paper.monitor", bind=True, max_retries=0)
     def paper_monitor_task(self):  # type: ignore[no-untyped-def]
         return _run(_monitor_paper_async)
+
+    @app.task(name="paper.challengers", bind=True, max_retries=0)
+    def paper_challengers_task(self):  # type: ignore[no-untyped-def]
+        return _run(_challengers_async)
 
     @app.task(name="paper.supervise", bind=True, max_retries=0)
     def paper_supervise_task(self):  # type: ignore[no-untyped-def]

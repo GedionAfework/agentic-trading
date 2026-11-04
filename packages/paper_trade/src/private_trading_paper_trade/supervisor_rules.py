@@ -51,6 +51,8 @@ class Finding:
 class ModelSample:
     code: str
     trades: list[ClosedSoakTrade]  # ordered by close time
+    # Virtual challenger ledgers: alert, never pause real paper auto-open.
+    alert_only: bool = False
 
     @property
     def n(self) -> int:
@@ -99,7 +101,7 @@ def evaluate_supervisor(snap: SupervisorSnapshot) -> list[Finding]:
                     sample.code,
                     f"Paper drawdown {dd:.2f}R exceeds the {DRAWDOWN_PAUSE_R:.0f}R kill rule "
                     f"over {sample.n} trades.",
-                    pauses_auto_open=True,
+                    pauses_auto_open=not sample.alert_only,
                 )
             )
         elif dd >= DRAWDOWN_WARN_R:
@@ -120,7 +122,7 @@ def evaluate_supervisor(snap: SupervisorSnapshot) -> list[Finding]:
                     sample.code,
                     f"Mean {sample.mean_r:+.3f}R after {sample.n} paper trades "
                     "(roadmap: pause and inspect if mean R <= 0).",
-                    pauses_auto_open=True,
+                    pauses_auto_open=not sample.alert_only,
                 )
             )
         gap = sample.avg_extra_cost_bps
@@ -133,7 +135,7 @@ def evaluate_supervisor(snap: SupervisorSnapshot) -> list[Finding]:
                         sample.code,
                         f"Fills average {gap:.2f} bps worse than the cost model over "
                         f"{sample.n} trades (limit {FILL_GAP_BPS:.0f} bps).",
-                        pauses_auto_open=True,
+                        pauses_auto_open=not sample.alert_only,
                     )
                 )
             elif sample.n >= FILL_GAP_WARN_MIN_TRADES:

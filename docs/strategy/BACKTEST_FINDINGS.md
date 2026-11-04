@@ -343,3 +343,8 @@ Note for the record, not a promotion: DOGE breakout v2 alone would clear the
 roadmap's standard absolute gates (≥80 trades, mean > 0, PF > 1.1, DD ≤ 20R,
 ≥60% positive years). It was picked as the best of 5 coins after two runs on
 spent data, so it could only ever enter as a forward paper-only candidate.
+
+**Owner decision 2026-11-04:** keep the NaolDesk REJECT on record, but run
+DOGE breakout v2 as a forward **paper-only challenger** to DOGE V1 (virtual
+ledger from 2026-11-05; see PAPER_SOAK_ROADMAP). Not in PAPER_MODEL_REGISTRY;
+live alerts blocked.

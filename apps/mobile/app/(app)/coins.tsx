@@ -49,6 +49,19 @@ function CoinCard({ coin }: { coin: DeskCoin }) {
         </Muted>
       ) : null}
       {coin.context ? <Muted>{coin.context}</Muted> : null}
+      {coin.challenger ? (
+        <Muted>
+          Challenger (paper only, since {coin.challenger.forward_start.slice(0, 10)}):{" "}
+          {coin.challenger.challenger?.closed_trades ?? 0} trades
+          {coin.challenger.challenger?.mean_r != null
+            ? ` · ${((coin.challenger.challenger.win_rate ?? 0) * 100).toFixed(1)}% wins · ${coin.challenger.challenger.mean_r.toFixed(3)}R`
+            : ""}{" "}
+          vs incumbent {coin.challenger.incumbent?.closed_trades ?? 0} trades
+          {coin.challenger.incumbent?.mean_r != null
+            ? ` · ${coin.challenger.incumbent.mean_r.toFixed(3)}R`
+            : ""}
+        </Muted>
+      ) : null}
       {coin.last_scan?.candle_open_time ? (
         <Muted>Last scan: {coin.last_scan.candle_open_time.replace("T", " ").slice(0, 16)} UTC</Muted>
       ) : null}

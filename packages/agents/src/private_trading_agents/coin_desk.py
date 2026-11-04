@@ -244,6 +244,9 @@ def narrate_coin(coin: dict[str, Any]) -> str:
             f"Levels: entry {levels.get('entry')}, stop {levels.get('stop')}, "
             f"target {levels.get('target')} (R:R {levels.get('rr')})."
         )
+    ch = coin.get("challenger")
+    if ch:
+        lines.append(_challenger_line(ch))
     research = coin.get("research")
     if research:
         lines.append(
@@ -252,6 +255,19 @@ def narrate_coin(coin: dict[str, Any]) -> str:
         )
     lines.append("Paper only; not a trade instruction.")
     return "\n".join(lines)
+
+
+def _challenger_line(ch: dict[str, Any]) -> str:
+    c = ch.get("challenger") or {}
+    inc = ch.get("incumbent") or {}
+    text = f"Challenger {ch.get('label')}: {c.get('closed_trades', 0)} forward trades"
+    if c.get("mean_r") is not None:
+        text += f", {c['win_rate'] * 100:.1f}% wins, {c['mean_r']:+.3f}R"
+    text += f" vs incumbent {inc.get('closed_trades', 0)} trades"
+    if inc.get("mean_r") is not None:
+        text += f", {inc['mean_r']:+.3f}R"
+    since = str(ch.get("forward_start", ""))[:10]
+    return text + f" (paper only, since {since})."
 
 
 def resolve_coin(raw: str, symbols: tuple[str, ...]) -> str | None:
@@ -267,6 +283,7 @@ async def coin_desk_status(session: Any, *, owner_user_id: uuid.UUID) -> dict[st
     from private_trading_db.models.paper import PaperTrade
     from private_trading_db.models.scanner import ScanRun
     from private_trading_paper_trade.btc_shadow import btc_regime_shadow_report
+    from private_trading_paper_trade.challenger import challenger_status
     from private_trading_paper_trade.engine import STATUS_OPEN, STATUS_READY
     from private_trading_paper_trade.service import (
         portfolio_status,
@@ -337,6 +354,11 @@ async def coin_desk_status(session: Any, *, owner_user_id: uuid.UUID) -> dict[st
                 auto_open_enabled=bool(supervisor["paper_auto_open_enabled"]),
                 now=now,
             )
+        )
+    challengers = await challenger_status(session)
+    for coin in coins:
+        coin["challenger"] = next(
+            (c for c in challengers if c.get("symbol") == coin["symbol"]), None
         )
     soak = await soak_step1_progress(session, owner_user_id=owner_user_id)
     latest_tagged = (

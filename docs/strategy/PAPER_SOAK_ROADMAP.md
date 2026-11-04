@@ -202,6 +202,23 @@ Scan runs now log `reasons`, `explanation`, `risk_approved` and ENTER
 Note: the scanner uses one objective for every coin. DOGE only has a
 `profit` model, so the `win_rate` profile puts DOGE on WAIT. The desk says so.
 
+## DOGE challenger — NaolDesk breakout v2 (paper only)
+
+Owner decision 2026-11-04: run DOGE NaolDesk breakout v2 (BACKTEST_FINDINGS,
+116 trades · 50.0% · +0.282R · PF 1.54 · DD 13.0R on spent data) as a
+**paper-only challenger** to DOGE V1. The 80% win-rate goal stays a stretch
+target, not the bar for paper.
+
+- One paper position per coin, so the challenger keeps a **virtual forward
+  ledger** (`paper.challengers`, hourly). It replays the frozen simulator
+  `private_trading_backtest.naoldesk` (same code as the backtest, regression
+  tested) over DOGE candles from **2026-11-05 00:00 UTC** onward.
+- It never opens real paper trades, never alerts, never changes DOGE V1.
+- Supervisor applies the same kill rules to it, **alert-only**.
+- Visible in `GET /v1/paper/challengers`, `/why doge`, mobile Coins tab.
+- Judge only after ≥ 30 forward closed trades for each model. Promotion
+  (replacing DOGE V1 in paper) is a separate owner decision.
+
 ## Agentic shadow (optional, off by default)
 
 During paper soak you may set `AGENTIC_SHADOW_ENABLED=true` so AG-01 runs

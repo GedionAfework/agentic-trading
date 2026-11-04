@@ -216,6 +216,13 @@ export type DeskCoin = {
   levels: { entry: string | null; stop: string | null; target: string | null; rr: string | null } | null;
   open_trade: Record<string, unknown> | null;
   reasons: string[];
+  challenger?: {
+    label: string;
+    forward_start: string;
+    status?: string;
+    challenger?: { closed_trades: number; win_rate: number | null; mean_r: number | null };
+    incumbent?: { code: string; closed_trades: number; win_rate: number | null; mean_r: number | null };
+  } | null;
   authorizes_trade: false;
 };
 
