@@ -45,6 +45,8 @@ CLIMAX_VOL_MULT = 2.0
 CLIMAX_RANGE_ATR = 0.6
 MAX_BARS = 720
 FEE = 0.001
+# v1 = 1h structure exit (rejected); v2 = 4h structure exit (the one revision)
+EXIT_TF = "4h" if "--v2" in sys.argv else "1h"
 DAILY_EMA = 50
 DAILY_SLOPE_LOOKBACK = 10
 
@@ -89,6 +91,9 @@ class Prepared:
     h4_last: list  # index of last 4h candle completed by the 1h bar's open
     atr4h: list
     b4: Bars
+    # v2: index of the 4h candle that completes at the close of 1h bar i (else -1)
+    h4_done_at: list
+    swing_low_4h: list  # latest confirmed 4h swing low known at close of 4h candle q
 
 
 def prepare(b: Bars, b4: Bars, bd: Bars) -> Prepared:
@@ -132,8 +137,18 @@ def prepare(b: Bars, b4: Bars, bd: Bars) -> Prepared:
         while k + 1 < len(b4.t) and b4.t[k + 1] + timedelta(hours=4) <= b.t[i]:
             k += 1
         h4_last[i] = k
+    t4_index = {t: q for q, t in enumerate(b4.t)}
+    h4_done_at = [t4_index.get(b.t[i] + timedelta(hours=1) - timedelta(hours=4), -1)
+                  for i in range(n)]
+    sl4: list = [None] * len(b4.t)
+    cur = None
+    for q in range(len(b4.t)):
+        j = q - PIVOT
+        if j >= PIVOT and b4.l[j] < min(b4.l[j - PIVOT:j] + b4.l[j + 1:j + PIVOT + 1]):
+            cur = (b4.l[j], j)
+        sl4[q] = cur
     return Prepared(b, atr1h, volma, sh, sl, daily_down, h4_last,
-                    atr(b4.h, b4.l, b4.c), b4)
+                    atr(b4.h, b4.l, b4.c), b4, h4_done_at, sl4)
 
 
 def session_ok(t: datetime) -> bool:
@@ -152,7 +167,7 @@ class Position:
     tp1: bool = False
 
 
-def simulate(coin: str, p: Prepared, setup: str) -> list[Trade]:
+def simulate(coin: str, p: Prepared, setup: str, exit_tf: str = "1h") -> list[Trade]:
     b = p.b
     n = len(b.t)
     start = next(i for i, t in enumerate(b.t) if t >= SCORE_START)
@@ -199,10 +214,9 @@ def simulate(coin: str, p: Prepared, setup: str) -> list[Trade]:
                 pos.tp1 = True
                 pos.stop = pos.entry
         if pos is not None:
-            low_sw = p.swing_low[k]
             ma = p.volma[k]
             a = p.atr1h[k]
-            if low_sw is not None and b.c[k] < low_sw[0] <= b.c[k - 1]:
+            if _structure_break(p, k, exit_tf):
                 pending_exit = "structure"
             elif (b.c[k] > pos.entry and ma and a and b.v[k] >= CLIMAX_VOL_MULT * ma
                   and (b.h[k] - b.l[k]) < CLIMAX_RANGE_ATR * a):
@@ -238,6 +252,18 @@ def simulate(coin: str, p: Prepared, setup: str) -> list[Trade]:
     if pos is not None:
         close(n - 1, b.c[n - 1], "end_of_data")
     return trades
+
+
+def _structure_break(p: Prepared, k: int, exit_tf: str) -> bool:
+    if exit_tf == "1h":
+        low_sw = p.swing_low[k]
+        return low_sw is not None and p.b.c[k] < low_sw[0] <= p.b.c[k - 1]
+    # v2: judged only when a 4h candle completes at this 1h close
+    q = p.h4_done_at[k]
+    if q < 1:
+        return False
+    low_sw = p.swing_low_4h[q]
+    return low_sw is not None and p.b4.c[q] < low_sw[0] <= p.b4.c[q - 1]
 
 
 def _track_sweep(p: Prepared, k: int, sweep: dict | None, used: set[float]) -> dict | None:
@@ -314,15 +340,27 @@ def gates(s: Stats, *, pooled: bool) -> list[str]:
     return fails
 
 
+async def fetch_retry(provider, **kw):
+    """Network retries only; never changes what data is used."""
+    for attempt in range(5):
+        try:
+            return await fetch_all(provider, **kw)
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 4:
+                raise
+            print(f"  retry {attempt + 1} after {type(exc).__name__}", flush=True)
+            await asyncio.sleep(5 * (attempt + 1))
+
+
 async def main() -> None:
     provider = BinanceSpotProvider(timeout_seconds=60.0)
     prepared: dict[str, Prepared] = {}
     try:
         for pair in COINS:
             print(f"fetching {pair}…", flush=True)
-            one = to_bars(await fetch_all(provider, symbol=pair, timeframe="1h", start=FETCH_START))
-            four = to_bars(await fetch_all(provider, symbol=pair, timeframe="4h", start=FETCH_START))
-            day = to_bars(await fetch_all(provider, symbol=pair, timeframe="1d", start=FETCH_START))
+            one = to_bars(await fetch_retry(provider, symbol=pair, timeframe="1h", start=FETCH_START))
+            four = to_bars(await fetch_retry(provider, symbol=pair, timeframe="4h", start=FETCH_START))
+            day = to_bars(await fetch_retry(provider, symbol=pair, timeframe="1d", start=FETCH_START))
             prepared[pair] = prepare(one, four, day)
             print(f"  {pair}: 1h={len(one.t)} 4h={len(four.t)} 1d={len(day.t)} "
                   f"{one.t[0]:%Y-%m-%d}..{one.t[-1]:%Y-%m-%d}", flush=True)
@@ -330,11 +368,12 @@ async def main() -> None:
         await provider.aclose()
 
     print("\nColumns: trades  win%  meanR  totalR  PF  maxDD  positive-years")
+    print("NaolDesk " + ("v2 (4h structure exit)" if EXIT_TF == "4h" else "v1 (1h structure exit)"))
     for setup, title in (("A", "SETUP A — Breakout"), ("B", "SETUP B — Spring")):
         everything: list[Trade] = []
         print(f"\n===== {title} =====")
         for pair in COINS:
-            ts = simulate(pair[:-4], prepared[pair], setup)
+            ts = simulate(pair[:-4], prepared[pair], setup, exit_tf=EXIT_TF)
             everything += ts
             s = stats(ts)
             fails = gates(s, pooled=False)

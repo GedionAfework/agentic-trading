@@ -315,3 +315,31 @@ structure 327, break-even 155, climax 3.
 **Decision: REJECT** (every owner target and roadmap gate failed, pooled and
 per coin). Not added to any registry. One revision is allowed only with a
 written, framework-based reason, as a new pre-registered version.
+
+## 2026-11-04 — NaolDesk v2 (the one revision: 4H structure exit): REJECT
+
+Hypothesis: [STEP6_HYPOTHESIS_NAOLDESK_V2.md](./STEP6_HYPOTHESIS_NAOLDESK_V2.md),
+committed (53b7e63) before the run. Same script with `--v2`, same data/costs.
+(An earlier attempt died in the data download with no results produced.)
+
+| Setup | Trades | Win rate | Mean R | Total | PF | Max DD | Positive years |
+|---|---|---|---|---|---|---|---|
+| A Breakout, all coins | 663 | 47.4% | **+0.112R** | +74.3R | 1.19 | 56.0R | 3/5 |
+| B Spring, all coins | 331 | 40.2% | −0.230R | −76.2R | 0.60 | 90.4R | 0/5 |
+
+Per coin (A): BTC +0.181R (DD 22.8R), ETH +0.077R, SOL +0.085R,
+**DOGE 116 · 50.0% · +0.282R · PF 1.54 · DD 13.0R · 3/5 years**, BNB −0.043R.
+Spring stays negative on every coin.
+
+The 4H exit turned the breakout from −0.083R to +0.112R (avg win +1.45R vs
+avg loss −1.09R) but win rate rose only to 47.4%; 48.4% of trades reached
++1R. Exits (A): stop 322, break-even 217, structure 120.
+
+**Decision: REJECT** under the pre-registered owner gates (win rate ≥ 80%
+failed everywhere; pooled mean R and DD also failed). NaolDesk has used its
+one revision. Not added to any registry.
+
+Note for the record, not a promotion: DOGE breakout v2 alone would clear the
+roadmap's standard absolute gates (≥80 trades, mean > 0, PF > 1.1, DD ≤ 20R,
+≥60% positive years). It was picked as the best of 5 coins after two runs on
+spent data, so it could only ever enter as a forward paper-only candidate.
