@@ -47,3 +47,20 @@ def test_holdout_can_pass_on_post_freeze_sample() -> None:
     assert result["decision"] == "PASS"
     assert result["approved_for_paper_promotion"] is True
     assert result["blocking_gates"] == []
+
+
+def test_holdout_benchmarks_follow_selected_model() -> None:
+    from private_trading_strategies.multi_market import SOL_PROFIT_MODEL, SOL_WIN_RATE_MODEL
+
+    trades: list[ClosedSoakTrade] = []
+    for month in (10, 11, 12):
+        trades.extend([_trade(0.12, 2026, month, 15) for _ in range(20)])
+        trades.extend([_trade(-0.05, 2026, month, 15) for _ in range(10)])
+    # mean ~ +0.063R: below V1 floor (0.1075), above V2 floor (0.0295).
+    v1 = evaluate_holdout_review(trades, step2_complete=True, model=SOL_PROFIT_MODEL)
+    v2 = evaluate_holdout_review(trades, step2_complete=True, model=SOL_WIN_RATE_MODEL)
+    assert v1["model_code"] == SOL_PROFIT_MODEL.code
+    assert "competitive_vs_research" in v1["blocking_gates"]
+    assert v2["model_code"] == SOL_WIN_RATE_MODEL.code
+    assert v2["research_mean_r"] == SOL_WIN_RATE_MODEL.validation.mean_r
+    assert v2["decision"] == "PASS"

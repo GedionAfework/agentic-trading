@@ -21,6 +21,7 @@ from private_trading_api.routes.auth import router as auth_router
 from private_trading_api.routes.backtests import router as backtests_router
 from private_trading_api.routes.decision import router as decision_router
 from private_trading_api.routes.decisions import router as decisions_router
+from private_trading_api.routes.desk import router as desk_router
 from private_trading_api.routes.health import router as health_router
 from private_trading_api.routes.knowledge import router as knowledge_router
 from private_trading_api.routes.markets import router as markets_router
@@ -193,6 +194,7 @@ def create_app() -> FastAPI:
     app.include_router(scanner_router, prefix="/v1")
     app.include_router(telegram_router, prefix="/v1")
     app.include_router(paper_router, prefix="/v1")
+    app.include_router(desk_router, prefix="/v1")
     app.include_router(analytics_router, prefix="/v1")
     app.include_router(release_router, prefix="/v1")
     return app

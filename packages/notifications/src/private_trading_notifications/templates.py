@@ -230,7 +230,8 @@ def settings_view(switches: dict[str, bool], *, can_edit: bool) -> str:
     if can_edit:
         lines.append("")
         lines.append("Change: <code>/settings scanner on|off</code>, "
-                     "<code>/settings notifications on|off</code>")
+                     "<code>/settings notifications on|off</code>, "
+                     "<code>/settings paper on|off</code>")
     return "\n".join(lines)
 
 
@@ -240,6 +241,8 @@ def help_text(*, linked: bool) -> str:
     return "\n".join(
         [
             "<b>Commands</b>",
+            "/coins — status of BTC/ETH/SOL/DOGE (why WAIT/ENTER)",
+            "/why COIN — full reasons for one coin, e.g. <code>/why sol</code>",
             "/setups — recent setup candidates",
             "/markets — data freshness per market",
             "/strategies — registered strategies",

@@ -10,6 +10,7 @@ from private_trading_agents.contracts import (
     RiskAgentOut,
 )
 from private_trading_agents.tools import ToolId
+from private_trading_agents.tools.portfolio_schemas import PortfolioStatusOut
 from private_trading_agents.tools.schemas import RiskAssessOut
 
 
@@ -46,3 +47,15 @@ def run_risk_agent(payload: RiskAgentIn | dict) -> RiskAgentOut:
             note="risk veto",
         ),
     )
+
+
+def run_portfolio_status(payload: dict) -> PortfolioStatusOut:
+    """Read-only portfolio view through the AG-06 allowlist (never opens trades)."""
+    result = call_tool(
+        agent=AgentId.AG06_RISK,
+        tool=ToolId.RISK_PORTFOLIO_STATUS,
+        payload=payload,
+        note="portfolio status",
+    )
+    assert isinstance(result, PortfolioStatusOut)
+    return result

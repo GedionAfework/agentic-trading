@@ -52,6 +52,12 @@ from private_trading_strategies.specialists import (
     StrategyFamily,
     evaluate_specialist,
 )
+from private_trading_strategies.trading_profile import (
+    DEFAULT_TRADING_OBJECTIVE,
+    list_trading_profiles,
+    model_for_objective,
+    parse_trading_objective,
+)
 from private_trading_strategies.types import (
     Direction,
     FeatureFact,
@@ -93,6 +99,7 @@ __all__ = [
     "StrategyAssessment",
     "StrategyDefinition",
     "TradingObjective",
+    "DEFAULT_TRADING_OBJECTIVE",
     "VALIDATED_SPECIALIST_MODELS",
     "ValidatedSpecialistModel",
     "build_playbook_context",
@@ -101,6 +108,9 @@ __all__ = [
     "evaluate_strategy",
     "assert_soak_freeze",
     "evaluate_specialist",
+    "list_trading_profiles",
+    "model_for_objective",
+    "parse_trading_objective",
     "resolve_market_model",
     "soak_incumbent",
     "soak_scan_symbols",

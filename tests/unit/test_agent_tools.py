@@ -128,7 +128,7 @@ def test_permissions_matrix_is_auditable() -> None:
     assert "workflow.finish" in matrix["AG-01"]
     assert "features.compute" not in matrix["AG-01"]
     assert matrix["AG-04"] == ["features.compute"]
-    assert matrix["AG-06"] == ["risk.assess"]
+    assert matrix["AG-06"] == ["risk.assess", "risk.portfolio_status"]
     summary = catalog_summary()
     assert {row["tool"] for row in summary} == {t.value for t in ToolId}
 

@@ -29,9 +29,11 @@ Status: **done** (2026-10-08). Journal: [SOAK_FREEZE.md](./SOAK_FREEZE.md).
 
 1. Confirm runtime routing: SOL paper models only; everything else `WAIT`.
 2. Confirm `VALIDATED_SPECIALIST_MODELS` is empty and `live_alerts_allowed` is false.
-3. Pick the paper profile and do not switch mid-soak without a written reason:
-   - `profit` → V1 **(active soak)**
-   - `win_rate` → V2 scale-out (frozen alternate)
+3. Pick the paper profile in the client (`GET/PUT /paper/trading-profile`) and do
+   not switch mid-soak without a written reason:
+   - `profit` → V1 expectancy **(default)**
+   - `win_rate` → V2 scale-out (higher WR, lower mean R)
+   Scanner `scanner.scan_all` follows the saved preference.
 4. Record the git SHA, model codes, fill model, and cost assumptions in the journal.
 
 **Done when:** scanner cannot publish live alerts, and a SOL `ENTER` is paper-eligible only.
@@ -151,6 +153,71 @@ Allowed only as a **new catalog version**, never as silent edits to V1/V2:
 BTC/ETH/BNB/FX stay research-only until a challenger passes this step on that symbol alone.
 A later Step 6 version needs a different unused idea (or more calendar data),
 not a looser trade-count gate on this catalog.
+
+## Portfolio gate visibility (read-only)
+
+Paper opens are already refused by the portfolio gate (one position per coin,
+crypto cluster cap 1% summed risk, total 2%, daily loss stop −1.5%). With SOL
+and DOGE at 0.5% each, both can be open together and that fills the crypto
+cluster; correlated coins count as one bet. Rules unchanged during the soak.
+
+`GET /paper/portfolio` and AG-06 tool `risk.portfolio_status` show caps,
+headroom, per-coin verdicts (BTC/ETH/SOL/DOGE) and recent refused opens.
+Verdicts call the same gate function, so the view cannot disagree with it.
+`authorizes_trade` is always false: free headroom never means a trade.
+
+## Paper supervisor (kill rules, automated)
+
+Celery beat `paper.supervise` runs every 15 minutes. Checks are deterministic
+and judged **per model** (SOL V1, SOL V2, DOGE V1 never pooled):
+
+| Finding | Rule | Action |
+|---|---|---|
+| `drawdown_breach` | closed-trade DD > 20R | pause + alert |
+| `drawdown_warning` | DD ≥ 15R | alert |
+| `negative_expectancy` | ≥ 20 trades and mean R ≤ 0 (Step 1 kill rule) | pause + alert |
+| `fill_gap_breach` / `_warning` | avg extra cost ≥ 2 bps at ≥ 20 / ≥ 5 trades | pause / alert |
+| `integrity_defects` | paper state defects | pause + alert |
+| `stale_feed` | no fresh closed 1h candle (BTC/ETH/SOL/DOGE) | alert |
+| `scanner_failures` | ≥ 3 failed scan runs in 6h | alert |
+
+Pause sets `paper_auto_open_enabled=false`: new ENTERs are recorded but no
+paper trade opens; open trades are still monitored to exit. The supervisor
+**cannot resume**. Owner resumes after inspection with `/settings paper on` or
+`PUT /v1/scanner/switches {"paper_auto_open_enabled": true}` (audited).
+Alerts go to Telegram only when a new finding appears, plus one all-clear.
+State: `GET /v1/paper/supervisor`; manual run: `POST /v1/paper/supervisor/run`.
+
+## Coin desk (copilot surface)
+
+`GET /v1/desk/coins`, Telegram `/coins` + `/why COIN`, mobile **Coins** tab.
+For BTC/ETH/SOL/DOGE: last closed-candle verdict, role (paper model /
+watch only / no model for the selected profile), plain-language reasons,
+open paper trade, portfolio refusals, supervisor pause, soak progress.
+Text is built from computed fields only and never authorizes a trade.
+
+Scan runs now log `reasons`, `explanation`, `risk_approved` and ENTER
+`levels` in `details` (logging only; decisions unchanged).
+
+Note: the scanner uses one objective for every coin. DOGE only has a
+`profit` model, so the `win_rate` profile puts DOGE on WAIT. The desk says so.
+
+## DOGE challenger — NaolDesk breakout v2 (paper only)
+
+Owner decision 2026-11-04: run DOGE NaolDesk breakout v2 (BACKTEST_FINDINGS,
+116 trades · 50.0% · +0.282R · PF 1.54 · DD 13.0R on spent data) as a
+**paper-only challenger** to DOGE V1. The 80% win-rate goal stays a stretch
+target, not the bar for paper.
+
+- One paper position per coin, so the challenger keeps a **virtual forward
+  ledger** (`paper.challengers`, hourly). It replays the frozen simulator
+  `private_trading_backtest.naoldesk` (same code as the backtest, regression
+  tested) over DOGE candles from **2026-11-05 00:00 UTC** onward.
+- It never opens real paper trades, never alerts, never changes DOGE V1.
+- Supervisor applies the same kill rules to it, **alert-only**.
+- Visible in `GET /v1/paper/challengers`, `/why doge`, mobile Coins tab.
+- Judge only after ≥ 30 forward closed trades for each model. Promotion
+  (replacing DOGE V1 in paper) is a separate owner decision.
 
 ## Agentic shadow (optional, off by default)
 

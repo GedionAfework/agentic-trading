@@ -233,3 +233,118 @@ Encoded as `doge-mtf-bos-volume-profit` v1 in `PAPER_MODEL_REGISTRY`
 (**paper-only**, live alerts blocked). Note: 2025–2026 folds were negative, so
 paper soak is required before any alert discussion. BTC/ETH remain WAIT (prior
 rejects). SOL V1 remains the primary soak incumbent.
+
+## 2026-10-22 — Step 6 v4 SOL 1d→1h scale-out (beat V2 WR?)
+
+Hypothesis: [STEP6_HYPOTHESIS_V4.md](./STEP6_HYPOTHESIS_V4.md). Catalog
+`sol-mtf-daily1h-scaleout-v4`. Unused stack (daily bias + 1h entry + scale-out).
+Nested yearly walk-forward, win-rate selection, SOL costs, 80-bar embargo.
+72 candidates. Script: `scripts/_daily1h_wr_challenger_walkforward.py`.
+
+| Year | Selected (abbrev.) | Trades | Win rate | Mean R |
+|---|---|---:|---:|---:|
+| 2022 | close50_slope vol≥1.5 partial@0.75R →2.5R | 12 | 50.0% | −0.221 |
+| 2023 | close50_slope vol≥1.5 partial@0.75R →2.5R | 82 | 61.0% | +0.067 |
+| 2024 | close50_slope vol≥1.5 partial@0.75R →2.5R | 84 | 50.0% | −0.089 |
+| 2025 | close50_slope vol≥1.5 partial@0.75R →3.0R | 57 | 45.6% | −0.258 |
+| 2026 | stack_slope vol≥1.5 partial@0.75R →2.5R | 19 | 63.2% | +0.081 |
+
+Combined: **254 trades**, **53.5%** wins, **−0.070R** mean, 0.84 PF, 30.28R DD.
+
+Failed gates: non-positive expectancy, PF, drawdown, positive-year fraction,
+did not beat V2 WR (58.9%) or V2 mean R (+0.059).
+
+**Decision: REJECT.** Not added to `PAPER_MODEL_REGISTRY`. Client picker stays
+V1 (expectancy) / V2 (win rate). Do not retune V2 on spent 4h→1h bars to force
+a higher WR.
+
+## 2026-11-03 — BTC regime split, frozen 4h→1h model on the owner coins (informational)
+
+Script: `scripts/_btc_regime_check.py`. Binance 2022-01-01..2026-11-03.
+No search: frozen V1 config (4h stack_slope, 1h BOS, vol≥2, ≤2 ATR, 3R,
+80 bars) and one pre-declared BTC rule (BTC 4h close>EMA12>EMA21>EMA50,
+EMA50 rising over 10 candles; risk-on 29.9% of bars). **Spent data**: this
+same BTC agreement option was already in V1's grid and was not selected.
+Harness reproduces the SOL V1 registry exactly (164 / 40.9% / +0.215R).
+
+| Coin | All trades | BTC risk-on | BTC risk-off |
+|---|---|---|---|
+| BTC | 196 · 28.6% · −0.238R | (own trend) | — |
+| ETH | 167 · 32.9% · −0.154R | 135 · 34.8% · −0.088R | 47 · 36.2% · −0.115R |
+| SOL | 164 · 40.9% · **+0.215R** | 134 · 39.6% · +0.129R | 54 · 40.7% · +0.227R |
+| DOGE | 160 · 37.5% · +0.085R | 134 · 38.1% · +0.125R | 38 · 36.8% · +0.030R |
+
+(risk-on + risk-off can exceed All: filtering frees the one-position slot.)
+
+Read:
+
+- **SOL:** a BTC filter would *hurt* (+0.129R on vs +0.215R all). Consistent
+  with the original walk-forward rejecting it. Do not add.
+- **DOGE:** risk-on looks better (+0.125R vs +0.030R), but risk-off is 38
+  trades and years disagree (2026 risk-on −0.568R). Not evidence. Note this
+  simple harness gives DOGE +0.085R vs the registry's nested-WF +0.173R;
+  2026 is negative either way, so DOGE stays on probation.
+- **BTC / ETH:** negative with or without the filter. The BTC regime does not
+  rescue them; they stay watch-only.
+
+**Decision:** no filter. BTC regime ships as a **shadow tag only** on every
+scan/decision (`btc_regime_shadow`), and `GET /v1/paper/btc-regime-shadow`
+splits *forward* closed paper trades by it. Revisit only when each bucket
+has ≥30 closed paper trades per model, and then only as a new written
+hypothesis with its own walk-forward.
+
+## 2026-11-04 — NaolDesk Step 6 (pre-registered): REJECT both setups
+
+Hypothesis: [STEP6_HYPOTHESIS_NAOLDESK.md](./STEP6_HYPOTHESIS_NAOLDESK.md),
+committed (6746691) before the run. Script: `scripts/_naoldesk_test.py`,
+run once on Binance 2022-01-01..2026-11-03, BTC/ETH/SOL/DOGE/BNB, long only,
+6 bps adverse fills + 10 bps fee per side.
+
+| Setup | Trades | Win rate | Mean R | Total | PF | Max DD | Positive years |
+|---|---|---|---|---|---|---|---|
+| A Breakout, all coins | 814 | 44.0% | −0.083R | −67.5R | 0.85 | 113.3R | 1/5 |
+| B Spring, all coins | 334 | 38.9% | −0.238R | −79.6R | 0.56 | 89.3R | 0/5 |
+
+Per coin (A): BTC −0.169R, ETH −0.080R, SOL −0.104R, **DOGE +0.098R** (130 ·
+46.9% · PF 1.20), BNB −0.113R. Per coin (B): every coin negative.
+
+Diagnostics: only 42.5% (A) / 36.8% (B) of trades ever reached +1R, which
+caps the achievable win rate near that level. Exits (A): stop 329,
+structure 327, break-even 155, climax 3.
+
+**Decision: REJECT** (every owner target and roadmap gate failed, pooled and
+per coin). Not added to any registry. One revision is allowed only with a
+written, framework-based reason, as a new pre-registered version.
+
+## 2026-11-04 — NaolDesk v2 (the one revision: 4H structure exit): REJECT
+
+Hypothesis: [STEP6_HYPOTHESIS_NAOLDESK_V2.md](./STEP6_HYPOTHESIS_NAOLDESK_V2.md),
+committed (53b7e63) before the run. Same script with `--v2`, same data/costs.
+(An earlier attempt died in the data download with no results produced.)
+
+| Setup | Trades | Win rate | Mean R | Total | PF | Max DD | Positive years |
+|---|---|---|---|---|---|---|---|
+| A Breakout, all coins | 663 | 47.4% | **+0.112R** | +74.3R | 1.19 | 56.0R | 3/5 |
+| B Spring, all coins | 331 | 40.2% | −0.230R | −76.2R | 0.60 | 90.4R | 0/5 |
+
+Per coin (A): BTC +0.181R (DD 22.8R), ETH +0.077R, SOL +0.085R,
+**DOGE 116 · 50.0% · +0.282R · PF 1.54 · DD 13.0R · 3/5 years**, BNB −0.043R.
+Spring stays negative on every coin.
+
+The 4H exit turned the breakout from −0.083R to +0.112R (avg win +1.45R vs
+avg loss −1.09R) but win rate rose only to 47.4%; 48.4% of trades reached
++1R. Exits (A): stop 322, break-even 217, structure 120.
+
+**Decision: REJECT** under the pre-registered owner gates (win rate ≥ 80%
+failed everywhere; pooled mean R and DD also failed). NaolDesk has used its
+one revision. Not added to any registry.
+
+Note for the record, not a promotion: DOGE breakout v2 alone would clear the
+roadmap's standard absolute gates (≥80 trades, mean > 0, PF > 1.1, DD ≤ 20R,
+≥60% positive years). It was picked as the best of 5 coins after two runs on
+spent data, so it could only ever enter as a forward paper-only candidate.
+
+**Owner decision 2026-11-04:** keep the NaolDesk REJECT on record, but run
+DOGE breakout v2 as a forward **paper-only challenger** to DOGE V1 (virtual
+ledger from 2026-11-05; see PAPER_SOAK_ROADMAP). Not in PAPER_MODEL_REGISTRY;
+live alerts blocked.

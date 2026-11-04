@@ -37,8 +37,10 @@ from private_trading_agents.scanner import (
     should_auto_open_paper,
 )
 from private_trading_agents.service import persist_decision
+from private_trading_agents.workflow import DecisionAction
 
-SWITCH_KEYS = ("scanner_enabled", "notifications_enabled")
+# paper_auto_open_enabled: the supervisor may set it false; only the owner sets it true.
+SWITCH_KEYS = ("scanner_enabled", "notifications_enabled", "paper_auto_open_enabled")
 QUEUES = ("market", "ai", "notifications", "backtests")
 
 
@@ -47,6 +49,7 @@ async def get_kill_switches(session: AsyncSession) -> dict[str, bool]:
     values = {
         "scanner_enabled": settings.scanner_enabled,
         "notifications_enabled": settings.notifications_enabled,
+        "paper_auto_open_enabled": True,
     }
     result = await session.execute(select(SystemSetting).where(SystemSetting.key.in_(SWITCH_KEYS)))
     for row in result.scalars().all():
@@ -88,6 +91,38 @@ async def resolve_owner_user_id(session: AsyncSession) -> uuid.UUID | None:
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+async def _btc_regime_tag(
+    session: AsyncSession, *, decision_open_time: datetime
+) -> dict[str, Any]:
+    """BTC regime as of the 1h decision candle close. Shadow tag only.
+
+    Uses BTC 4h candles that had fully closed by the time the 1h decision
+    candle closed, so the tag never peeks ahead.
+    """
+    from datetime import timedelta
+
+    from private_trading_strategies.btc_regime import (
+        BTC_REGIME_SYMBOL,
+        BTC_REGIME_TIMEFRAME,
+        classify_btc_regime,
+    )
+
+    try:
+        btc = await get_instrument_by_symbol(session, BTC_REGIME_SYMBOL)
+        if btc is None:
+            return classify_btc_regime([]).as_dict()
+        bars = await load_final_bars(
+            session, instrument_id=btc.id, timeframe=BTC_REGIME_TIMEFRAME, limit=300
+        )
+        decision_close = decision_open_time + timedelta(hours=1)
+        closed = [b for b in bars if b.open_time + timedelta(hours=4) <= decision_close]
+        return classify_btc_regime(closed).as_dict()
+    except Exception as exc:  # noqa: BLE001 — a shadow tag must never break a scan
+        tag = classify_btc_regime([]).as_dict()
+        tag["error"] = f"{type(exc).__name__}"[:80]
+        return tag
 
 
 async def load_final_bars(
@@ -306,10 +341,29 @@ async def scan_instrument_timeframe(
                 open_exposures=exposures,
                 daily_realized_pnl_pct=daily_pnl,
             )
+            # SHADOW ONLY: tag BTC regime; never gates or sizes anything.
+            regime_tag = await _btc_regime_tag(session, decision_open_time=candle_open_time)
+            run.details["btc_regime"] = regime_tag
+            if outcome.snapshot is not None:
+                outcome.snapshot.evidence["btc_regime_shadow"] = regime_tag
         run.status = outcome.status
         run.action = outcome.action
         run.setup_state = outcome.setup_state
         run.details["notes"] = outcome.notes
+        if outcome.snapshot is not None:
+            # Record why (not just what) so the coin desk can explain WAIT/ENTER.
+            # Logging only: does not change the decision or what gets opened.
+            snap = outcome.snapshot
+            run.details["reasons"] = list(snap.hard_blockers)
+            run.details["explanation"] = (snap.explanation or "")[:600]
+            run.details["risk_approved"] = bool(snap.risk_approved)
+            if snap.action == DecisionAction.ENTER:
+                run.details["levels"] = {
+                    "entry": None if snap.entry_price is None else str(snap.entry_price),
+                    "stop": None if snap.stop_price is None else str(snap.stop_price),
+                    "target": None if snap.target_price is None else str(snap.target_price),
+                    "rr": None if snap.rr_ratio is None else str(snap.rr_ratio),
+                }
         if outcome.publishable or outcome.paper_eligible:
             owner = owner_user_id or await resolve_owner_user_id(session)
             if owner is None:
@@ -331,17 +385,22 @@ async def scan_instrument_timeframe(
                 run.candidate_new = is_new
                 run.details["publish_state"] = candidate.publish_state
                 if is_new and should_auto_open_paper(outcome):
-                    try:
-                        trade = await accept_decision(
-                            session,
-                            owner_user_id=owner,
-                            candidate_id=candidate.id,
-                        )
-                        run.details["paper_trade_id"] = str(trade.id)
-                        run.details["paper_status"] = trade.status
-                    except AppError as exc:
-                        run.details["paper_open_blocked"] = exc.code
-                        run.details["paper_open_error"] = str(exc)[:500]
+                    if not switches.get("paper_auto_open_enabled", True):
+                        # Supervisor/owner pause: record the ENTER, open nothing.
+                        run.details["paper_open_blocked"] = "PAPER_AUTO_OPEN_PAUSED"
+                        run.details["paper_open_error"] = "paper auto-open is paused"
+                    else:
+                        try:
+                            trade = await accept_decision(
+                                session,
+                                owner_user_id=owner,
+                                candidate_id=candidate.id,
+                            )
+                            run.details["paper_trade_id"] = str(trade.id)
+                            run.details["paper_status"] = trade.status
+                        except AppError as exc:
+                            run.details["paper_open_blocked"] = exc.code
+                            run.details["paper_open_error"] = str(exc)[:500]
     except Exception as exc:  # noqa: BLE001 — dead-letter the run, keep scanning others
         run.status = "failed"
         run.error = f"{type(exc).__name__}: {exc}"[:2000]

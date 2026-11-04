@@ -9,11 +9,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from private_trading_strategies.multi_market import MarketModelSpec
 from private_trading_strategies.soak_freeze import (
     SOAK_HOLDOUT_MIN_MEAN_R_FRACTION_OF_RESEARCH,
     SOAK_HOLDOUT_START,
-    SOAK_RESEARCH_MEAN_R,
-    SOAK_RESEARCH_WIN_RATE,
     SOAK_STEP2_MAX_DRAWDOWN_R,
     SOAK_STEP2_MAX_EXTRA_COST_BPS,
     SOAK_STEP2_MIN_CLOSED_TRADES,
@@ -45,9 +44,16 @@ def evaluate_holdout_review(
     trades: list[ClosedSoakTrade],
     *,
     step2_complete: bool,
+    model: MarketModelSpec | None = None,
 ) -> dict[str, Any]:
-    """Score frozen soak trades on the unused paper window only."""
-    incumbent = soak_incumbent()
+    """Score frozen soak trades on the unused paper window only.
+
+    ``trades`` must already be filtered to ``model`` (one profile per sample).
+    Benchmarks come from that model's own walk-forward, never another's.
+    """
+    incumbent = model or soak_incumbent()
+    research_mean_r = float(incumbent.validation.mean_r)
+    research_win_rate = float(incumbent.validation.win_rate)
     holdout = filter_holdout_trades(trades)
     sample = evaluate_soak_sample(
         holdout,
@@ -58,12 +64,10 @@ def evaluate_holdout_review(
         min_positive_month_fraction=SOAK_STEP2_MIN_POSITIVE_MONTH_FRACTION,
         min_trades_per_month=SOAK_STEP2_MIN_TRADES_PER_MONTH,
         max_extra_cost_bps=SOAK_STEP2_MAX_EXTRA_COST_BPS,
-        research_mean_r=SOAK_RESEARCH_MEAN_R,
-        research_win_rate=SOAK_RESEARCH_WIN_RATE,
+        research_mean_r=research_mean_r,
+        research_win_rate=research_win_rate,
     )
-    competitive_floor = (
-        SOAK_RESEARCH_MEAN_R * SOAK_HOLDOUT_MIN_MEAN_R_FRACTION_OF_RESEARCH
-    )
+    competitive_floor = research_mean_r * SOAK_HOLDOUT_MIN_MEAN_R_FRACTION_OF_RESEARCH
     mean_r = float(sample["mean_r"])
     competitive = mean_r >= competitive_floor
     gates = dict(sample["gates"])
@@ -79,11 +83,12 @@ def evaluate_holdout_review(
         "holdout_source": "paper_trades_after_freeze",
         "selection_data_through": "2025-12-31",
         "note": (
-            "Holdout is closed SOL paper trades on/after the soak freeze. "
+            f"Holdout is closed SOL paper trades for {incumbent.code} on/after "
+            "the soak freeze. "
             "Do not recycle 2022–2026 walk-forward years as untouched."
         ),
         "competitive_mean_r_floor": competitive_floor,
-        "research_mean_r": SOAK_RESEARCH_MEAN_R,
+        "research_mean_r": research_mean_r,
         **sample,
         "gates": gates,
         "all_gates_passed": approved,

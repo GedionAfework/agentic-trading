@@ -25,7 +25,7 @@ class TelegramAccountOut(BaseModel):
 
 class DeliveryOut(BaseModel):
     id: uuid.UUID
-    candidate_id: uuid.UUID
+    candidate_id: uuid.UUID | None = None
     decision_record_id: uuid.UUID | None
     telegram_chat_id: int
     template: str

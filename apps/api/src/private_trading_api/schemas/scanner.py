@@ -36,11 +36,14 @@ class ScanResponse(BaseModel):
 class SwitchesOut(BaseModel):
     scanner_enabled: bool
     notifications_enabled: bool
+    paper_auto_open_enabled: bool = True
 
 
 class SwitchUpdate(BaseModel):
     scanner_enabled: bool | None = None
     notifications_enabled: bool | None = None
+    # Owner resume after a supervisor pause (or manual pause).
+    paper_auto_open_enabled: bool | None = None
 
 
 class ScannerStatusOut(BaseModel):

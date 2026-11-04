@@ -27,6 +27,7 @@ from private_trading_paper_trade.service import (
     list_events,
     list_trades,
     monitor_account,
+    portfolio_status,
     soak_step1_progress,
     soak_step2_progress,
     soak_step3_progress,
@@ -34,6 +35,12 @@ from private_trading_paper_trade.service import (
     soak_step5_progress,
 )
 from private_trading_paper_trade.soak_metrics import evaluate_soak_sample
+from private_trading_paper_trade.trading_profile import (
+    get_active_paper_model,
+    get_trading_objective,
+    set_trading_objective,
+    trading_profile_status,
+)
 
 __version__ = "0.1.0"
 
@@ -57,6 +64,7 @@ __all__ = [
     "list_events",
     "list_trades",
     "monitor_account",
+    "portfolio_status",
     "soak_step1_progress",
     "soak_step2_progress",
     "soak_step3_progress",
@@ -66,5 +74,9 @@ __all__ = [
     "evaluate_live_alert_decision",
     "evaluate_paper_promotion",
     "evaluate_soak_sample",
+    "get_active_paper_model",
+    "get_trading_objective",
+    "set_trading_objective",
+    "trading_profile_status",
     "__version__",
 ]

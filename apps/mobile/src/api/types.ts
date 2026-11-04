@@ -43,6 +43,33 @@ export type CandidateOut = {
   last_seen_at: string;
 };
 
+export type TradingProfileOption = {
+  objective: "profit" | "win_rate";
+  code: string;
+  version_no: number;
+  symbol: string;
+  label: string;
+  summary: string;
+  selected: boolean;
+  paper_only: boolean;
+  live_alerts_allowed: boolean;
+  validation: {
+    trades: number;
+    win_rate: number;
+    mean_r: number;
+    profit_factor?: number | null;
+    method: string;
+  };
+};
+
+export type TradingProfileOut = {
+  selected_objective: "profit" | "win_rate";
+  selected_code: string;
+  selected_version_no: number;
+  profiles: TradingProfileOption[];
+  note: string;
+};
+
 export type PaperAccountOut = {
   account_id: string;
   label: string;
@@ -54,6 +81,7 @@ export type PaperAccountOut = {
   closed_trades: number;
   sum_realized_r: string;
   soak: Record<string, unknown>;
+  trading_profile?: TradingProfileOut;
   integrity: { ok: boolean; defects: string[] };
 };
 
@@ -174,4 +202,51 @@ export type ApiErrorBody = {
     retryable?: boolean;
   };
   detail?: unknown;
+};
+
+export type DeskCoin = {
+  symbol: string;
+  headline: string;
+  role: "paper" | "inactive_for_profile" | "watch";
+  model_code: string | null;
+  regimes: string[];
+  research: { trades: number; win_rate: number; mean_r: number } | null;
+  context: string;
+  last_scan: { candle_open_time: string | null; status: string | null; action: string | null } | null;
+  levels: { entry: string | null; stop: string | null; target: string | null; rr: string | null } | null;
+  open_trade: Record<string, unknown> | null;
+  reasons: string[];
+  challenger?: {
+    label: string;
+    forward_start: string;
+    status?: string;
+    challenger?: { closed_trades: number; win_rate: number | null; mean_r: number | null };
+    incumbent?: { code: string; closed_trades: number; win_rate: number | null; mean_r: number | null };
+  } | null;
+  authorizes_trade: false;
+};
+
+export type CoinDeskOut = {
+  generated_at: string;
+  profile: { objective: "profit" | "win_rate"; model_code: string };
+  supervisor: { paper_auto_open_enabled: boolean; pause_reasons: string[] };
+  portfolio: { crypto_open_risk_pct: string; crypto_headroom_pct: string; daily_loss_stop_hit: boolean };
+  soak: {
+    model_code: string | null;
+    closed_trades: number | null;
+    min_closed_trades: number | null;
+    mean_r: number | null;
+    win_rate: number | null;
+  };
+  coins: DeskCoin[];
+  btc_regime: { label?: "risk_on" | "risk_off" | "unknown"; bar_open_time?: string | null };
+  btc_regime_shadow: {
+    models: {
+      model_code: string;
+      risk_on: { trades: number; win_rate: number | null; mean_r: number | null };
+      risk_off: { trades: number; win_rate: number | null; mean_r: number | null };
+      verdict: string;
+    }[];
+  };
+  authorizes_trade: false;
 };

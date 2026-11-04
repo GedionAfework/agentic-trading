@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,7 +28,45 @@ class PaperAccountOut(BaseModel):
     soak_step3: dict[str, Any] = Field(default_factory=dict)
     soak_step4: dict[str, Any] = Field(default_factory=dict)
     soak_step5: dict[str, Any] = Field(default_factory=dict)
+    trading_profile: dict[str, Any] = Field(default_factory=dict)
     integrity: dict[str, Any]
+
+
+class TradingProfileChoice(BaseModel):
+    objective: Literal["profit", "win_rate"]
+
+
+class TradingProfileOut(BaseModel):
+    selected_objective: Literal["profit", "win_rate"]
+    selected_code: str
+    selected_version_no: int
+    profiles: list[dict[str, Any]]
+    note: str = ""
+
+
+class PortfolioSymbolVerdictOut(BaseModel):
+    symbol: str
+    proposed_risk_pct: str
+    portfolio_allows_open: bool
+    blockers: list[str] = Field(default_factory=list)
+
+
+class PortfolioStatusOut(BaseModel):
+    open_positions: list[dict[str, Any]] = Field(default_factory=list)
+    total_open_risk_pct: str
+    total_open_risk_cap_pct: str
+    total_headroom_pct: str
+    crypto_open_risk_pct: str
+    crypto_cluster_cap_pct: str
+    crypto_headroom_pct: str
+    daily_realized_pnl_pct: str
+    daily_loss_stop_pct: str
+    daily_loss_stop_hit: bool
+    one_position_per_symbol: bool
+    symbols: list[PortfolioSymbolVerdictOut]
+    recent_blocked_opens: list[dict[str, Any]] = Field(default_factory=list)
+    authorizes_trade: Literal[False] = False
+    note: str = ""
 
 
 class PaperTradeOut(BaseModel):

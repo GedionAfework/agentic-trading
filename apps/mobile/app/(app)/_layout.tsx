@@ -31,6 +31,10 @@ export default function AppLayout() {
         options={{ title: "Dashboard", tabBarIcon: () => <TabIcon label="⌂" /> }}
       />
       <Tabs.Screen
+        name="coins"
+        options={{ title: "Coins", tabBarIcon: () => <TabIcon label="◈" /> }}
+      />
+      <Tabs.Screen
         name="setups/index"
         options={{ title: "Setups", href: "/(app)/setups", tabBarIcon: () => <TabIcon label="◎" /> }}
       />

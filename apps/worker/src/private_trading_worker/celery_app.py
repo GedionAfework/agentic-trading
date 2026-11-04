@@ -20,6 +20,8 @@ QUEUE_NAMES = ("market", "ai", "notifications", "backtests")
 SCAN_INTERVAL_SECONDS = 60
 DISPATCH_INTERVAL_SECONDS = 30
 PAPER_MONITOR_INTERVAL_SECONDS = 60
+SUPERVISOR_INTERVAL_SECONDS = 900  # 15 min; kill rules move on closed trades
+CHALLENGER_INTERVAL_SECONDS = 3600  # forward ledger on closed 1h candles
 
 
 def _timeframes() -> tuple[str, ...]:
@@ -173,6 +175,50 @@ async def _monitor_paper_async() -> dict[str, Any]:
             await dispose_engine()
 
 
+async def _supervise_paper_async() -> dict[str, Any]:
+    from private_trading_agents.scanner_service import resolve_owner_user_id
+    from private_trading_db.session import dispose_engine, get_session_factory
+    from private_trading_paper_trade.supervisor import run_supervisor
+
+    from private_trading_worker.locks import scan_lock
+
+    settings = get_settings()
+    async with scan_lock(
+        settings.redis_url, "paper:supervise", ttl_seconds=240
+    ) as acquired:
+        if not acquired:
+            return {"status": "skipped_locked"}
+        factory = get_session_factory()
+        try:
+            async with factory() as session:
+                owner = await resolve_owner_user_id(session)
+                if owner is None:
+                    return {"status": "skipped_no_owner"}
+                state = await run_supervisor(session, owner_user_id=owner)
+                return {
+                    "status": "ok",
+                    "alert_keys": state["alert_keys"],
+                    "paused_this_run": state["paused_this_run"],
+                }
+        finally:
+            await dispose_engine()
+
+
+async def _challengers_async() -> dict[str, Any]:
+    from private_trading_agents.scanner_service import resolve_owner_user_id
+    from private_trading_db.session import dispose_engine, get_session_factory
+    from private_trading_paper_trade.challenger import run_challenger_ledger
+
+    factory = get_session_factory()
+    try:
+        async with factory() as session:
+            owner = await resolve_owner_user_id(session)
+            state = await run_challenger_ledger(session, owner_user_id=owner)
+            return {"status": state.get("status"), "challenger": state.get("challenger")}
+    finally:
+        await dispose_engine()
+
+
 def create_celery_app():
     if Celery is None:
         raise RuntimeError("celery is not installed; run `uv sync`")
@@ -187,6 +233,8 @@ def create_celery_app():
             "scanner.scan_symbols": {"queue": "market"},
             "notifications.dispatch": {"queue": "notifications"},
             "paper.monitor": {"queue": "market"},
+            "paper.supervise": {"queue": "market"},
+            "paper.challengers": {"queue": "market"},
         },
         task_acks_late=True,
         task_reject_on_worker_lost=True,
@@ -211,6 +259,14 @@ def create_celery_app():
                 "task": "paper.monitor",
                 "schedule": schedule(run_every=PAPER_MONITOR_INTERVAL_SECONDS),
             },
+            "supervise-paper": {
+                "task": "paper.supervise",
+                "schedule": schedule(run_every=SUPERVISOR_INTERVAL_SECONDS),
+            },
+            "paper-challengers": {
+                "task": "paper.challengers",
+                "schedule": schedule(run_every=CHALLENGER_INTERVAL_SECONDS),
+            },
         },
     )
 
@@ -220,16 +276,24 @@ def create_celery_app():
 
     @app.task(name="scanner.scan_all", bind=True, max_retries=0)
     def scan_all_task(self):  # type: ignore[no-untyped-def]
-        from private_trading_strategies.soak_freeze import (
-            SOAK_OBJECTIVE,
-            owner_test_symbols,
-        )
+        from private_trading_strategies.soak_freeze import owner_test_symbols
 
         # Owner 2-week set (BTC/ETH/SOL/DOGE). Unvalidated coins stay WAIT;
         # only registry paper models can auto-open paper trades.
-        return _run(
-            lambda: _scan_all_async(owner_test_symbols(), SOAK_OBJECTIVE.value)
-        )
+        # Objective comes from client trading-profile preference (V1/V2).
+        async def _scan_with_profile():
+            from private_trading_db.session import dispose_engine, get_session_factory
+            from private_trading_paper_trade.trading_profile import get_trading_objective
+
+            factory = get_session_factory()
+            try:
+                async with factory() as session:
+                    objective = await get_trading_objective(session)
+            finally:
+                await dispose_engine()
+            return await _scan_all_async(owner_test_symbols(), objective.value)
+
+        return _run(_scan_with_profile)
 
     @app.task(name="scanner.scan_symbols", bind=True, max_retries=0)
     def scan_symbols_task(self, symbols: list[str]):  # type: ignore[no-untyped-def]
@@ -253,6 +317,14 @@ def create_celery_app():
     @app.task(name="paper.monitor", bind=True, max_retries=0)
     def paper_monitor_task(self):  # type: ignore[no-untyped-def]
         return _run(_monitor_paper_async)
+
+    @app.task(name="paper.challengers", bind=True, max_retries=0)
+    def paper_challengers_task(self):  # type: ignore[no-untyped-def]
+        return _run(_challengers_async)
+
+    @app.task(name="paper.supervise", bind=True, max_retries=0)
+    def paper_supervise_task(self):  # type: ignore[no-untyped-def]
+        return _run(_supervise_paper_async)
 
     return app
 
